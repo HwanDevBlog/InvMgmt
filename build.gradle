@@ -1,0 +1,44 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.16'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.hwandevblog'
+version = '0.0.1-SNAPSHOT'
+description = 'Inventory deduction and return consistency toy project'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-database-postgresql'
+	runtimeOnly 'org.postgresql:postgresql'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation enforcedPlatform('io.zonky.test.postgres:embedded-postgres-binaries-bom:16.14.0')
+	testImplementation 'io.zonky.test:embedded-postgres:2.2.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+tasks.register('localRun', JavaExec) {
+	group = 'application'
+	description = 'Runs the application with a local embedded PostgreSQL 16 instance.'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.hwandevblog.invmgmt.LocalApplication'
+	args '--server.port=18080'
+}
