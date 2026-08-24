@@ -12,7 +12,9 @@ public final class LocalApplication {
     }
 
     public static void main(String[] args) throws IOException {
-        postgres = EmbeddedPostgres.builder().start();
+        postgres = EmbeddedPostgres.builder()
+                .setLocaleConfig("lc-messages", "C")
+                .start();
         System.setProperty("spring.datasource.url", postgres.getJdbcUrl("postgres", "postgres"));
         System.setProperty("spring.datasource.username", "postgres");
         System.setProperty("spring.datasource.password", "postgres");

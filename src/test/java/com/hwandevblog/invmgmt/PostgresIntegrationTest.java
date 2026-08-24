@@ -19,7 +19,9 @@ public abstract class PostgresIntegrationTest {
 
     private static EmbeddedPostgres startPostgres() {
         try {
-            return EmbeddedPostgres.builder().start();
+            return EmbeddedPostgres.builder()
+                    .setLocaleConfig("lc-messages", "C")
+                    .start();
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to start embedded PostgreSQL", exception);
         }
