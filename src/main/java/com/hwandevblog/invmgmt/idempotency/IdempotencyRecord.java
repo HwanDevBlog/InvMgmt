@@ -1,5 +1,6 @@
 package com.hwandevblog.invmgmt.idempotency;
 
+import com.hwandevblog.invmgmt.common.BusinessConflictException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -42,5 +43,34 @@ public class IdempotencyRecord {
     private Instant updatedAt;
 
     protected IdempotencyRecord() {
+    }
+
+    public void verifyRequestHash(String requestHash) {
+        if (!this.requestHash.equals(requestHash)) {
+            throw new BusinessConflictException(
+                    "Idempotency key was already used for a different request");
+        }
+    }
+
+    public void complete(int responseStatus, String responseBody) {
+        if (status != IdempotencyStatus.PROCESSING) {
+            throw new BusinessConflictException("Idempotency request is not processing");
+        }
+        this.status = IdempotencyStatus.COMPLETED;
+        this.responseStatus = responseStatus;
+        this.responseBody = responseBody;
+        this.updatedAt = Instant.now();
+    }
+
+    public IdempotencyStatus getStatus() {
+        return status;
+    }
+
+    public Integer getResponseStatus() {
+        return responseStatus;
+    }
+
+    public String getResponseBody() {
+        return responseBody;
     }
 }

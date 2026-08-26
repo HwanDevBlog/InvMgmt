@@ -70,7 +70,8 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
                 "ORDER-RESERVE-001",
                 List.of(new CreateOrderRequest.Line(product.id(), 3))));
 
-        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id()))
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id())
+                        .header("Idempotency-Key", "reserve-success-001"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESERVED"));
 
@@ -98,7 +99,8 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
                 "ORDER-SHORTAGE-001",
                 List.of(new CreateOrderRequest.Line(product.id(), 3))));
 
-        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id()))
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id())
+                        .header("Idempotency-Key", "reserve-shortage-001"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("Insufficient stock"));
 
@@ -122,11 +124,74 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
                 "ORDER-REPEAT-001",
                 List.of(new CreateOrderRequest.Line(product.id(), 3))));
 
-        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id()))
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id())
+                        .header("Idempotency-Key", "reserve-repeat-001"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id()))
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id())
+                        .header("Idempotency-Key", "reserve-repeat-002"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("Only created orders can be reserved"));
+    }
+
+    @Test
+    void replaysCompletedReservationForSameIdempotencyKey() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-IDEMPOTENT", "Idempotent Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-IDEMPOTENT-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id())
+                        .header("Idempotency-Key", "reserve-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESERVED"));
+
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", order.id())
+                        .header("Idempotency-Key", "reserve-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESERVED"));
+
+        Integer reservationLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'RESERVE'",
+                Integer.class,
+                product.id());
+        String idempotencyStatus = jdbcTemplate.queryForObject(
+                "select status from idempotency_keys where idempotency_key = ?",
+                String.class,
+                "reserve-idempotent-001");
+
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+        assertThat(reservationLedgerCount).isEqualTo(1);
+        assertThat(idempotencyStatus).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void rejectsIdempotencyKeyReusedForDifferentOrder() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-IDEMPOTENCY-CONFLICT", "Conflict Product", 20));
+        OrderResponse firstOrder = orderService.create(new CreateOrderRequest(
+                "ORDER-IDEMPOTENCY-CONFLICT-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+        OrderResponse secondOrder = orderService.create(new CreateOrderRequest(
+                "ORDER-IDEMPOTENCY-CONFLICT-002",
+                List.of(new CreateOrderRequest.Line(product.id(), 4))));
+
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", firstOrder.id())
+                        .header("Idempotency-Key", "reused-for-different-order"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", secondOrder.id())
+                        .header("Idempotency-Key", "reused-for-different-order"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        "Idempotency key was already used for a different request"));
+    }
+
+    @Test
+    void requiresIdempotencyKeyForReservation() throws Exception {
+        mockMvc.perform(post("/api/orders/{orderId}/reserve", 999L))
+                .andExpect(status().isBadRequest());
     }
 }
