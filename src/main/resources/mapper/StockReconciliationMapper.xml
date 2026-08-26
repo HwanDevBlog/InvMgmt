@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hwandevblog.invmgmt.reconciliation.StockReconciliationMapper">
+
+    <resultMap id="stockReconciliationResultMap"
+               type="com.hwandevblog.invmgmt.reconciliation.StockReconciliationResponse">
+        <constructor>
+            <idArg column="product_id" javaType="_long"/>
+            <arg column="sku" javaType="java.lang.String"/>
+            <arg column="product_name" javaType="java.lang.String"/>
+            <arg column="current_quantity" javaType="_long"/>
+            <arg column="ledger_quantity" javaType="_long"/>
+            <arg column="difference" javaType="_long"/>
+            <arg column="consistent" javaType="_boolean"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findAll" resultMap="stockReconciliationResultMap">
+        with ledger_totals as (
+            select product_id,
+                   sum(quantity_delta)::bigint as ledger_quantity
+              from stock_ledger
+             group by product_id
+        )
+        select product.id as product_id,
+               product.sku as sku,
+               product.name as product_name,
+               stock.quantity as current_quantity,
+               coalesce(ledger.ledger_quantity, 0) as ledger_quantity,
+               stock.quantity - coalesce(ledger.ledger_quantity, 0) as difference,
+               stock.quantity = coalesce(ledger.ledger_quantity, 0) as consistent
+          from products product
+          join stocks stock
+            on stock.product_id = product.id
+          left join ledger_totals ledger
+            on ledger.product_id = product.id
+         order by product.id
+    </select>
+</mapper>
