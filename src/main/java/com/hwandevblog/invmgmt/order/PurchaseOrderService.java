@@ -83,6 +83,16 @@ public class PurchaseOrderService {
         return OrderResponse.from(order);
     }
 
+    @Transactional
+    public OrderResponse confirm(long orderId) {
+        PurchaseOrder order = orderRepository.findWithLinesById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+
+        // 재고는 예약 시점에 이미 차감했으므로 확정에서는 주문 상태만 전환한다.
+        order.confirm();
+        return OrderResponse.from(order);
+    }
+
     private void rejectDuplicateProducts(CreateOrderRequest request) {
         // 동일 상품이 여러 줄에 있으면 예약·취소·반품 수량 추적이 모호해지므로 생성 시점에 차단한다.
         Set<Long> productIds = new HashSet<>();

@@ -194,4 +194,72 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
         mockMvc.perform(post("/api/orders/{orderId}/reserve", 999L))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void confirmsReservedOrderWithoutChangingInventory() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-CONFIRM", "Confirm Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-CONFIRM-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+        orderService.reserve(order.id());
+        entityManager.flush();
+        Integer ledgerCountBeforeConfirm = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger where product_id = ?",
+                Integer.class,
+                product.id());
+
+        mockMvc.perform(post("/api/orders/{orderId}/confirm", order.id())
+                        .header("Idempotency-Key", "confirm-success-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        Integer ledgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger where product_id = ?",
+                Integer.class,
+                product.id());
+
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+        assertThat(ledgerCount).isEqualTo(ledgerCountBeforeConfirm);
+    }
+
+    @Test
+    void rejectsConfirmationUnlessOrderIsReserved() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-CONFIRM-STATE", "Confirm State Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-CONFIRM-STATE-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+
+        mockMvc.perform(post("/api/orders/{orderId}/confirm", order.id())
+                        .header("Idempotency-Key", "confirm-invalid-state-001"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Only reserved orders can be confirmed"));
+
+        assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.CREATED);
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void replaysCompletedConfirmationForSameIdempotencyKey() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-CONFIRM-IDEMPOTENT", "Confirm Idempotent Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-CONFIRM-IDEMPOTENT-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+        orderService.reserve(order.id());
+
+        mockMvc.perform(post("/api/orders/{orderId}/confirm", order.id())
+                        .header("Idempotency-Key", "confirm-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        mockMvc.perform(post("/api/orders/{orderId}/confirm", order.id())
+                        .header("Idempotency-Key", "confirm-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+    }
 }

@@ -26,4 +26,23 @@ class PurchaseOrderDomainTest {
                 .isInstanceOf(BusinessConflictException.class)
                 .hasMessage("Only created orders can be reserved");
     }
+
+    @Test
+    void changesReservedOrderToConfirmed() {
+        PurchaseOrder order = PurchaseOrder.create("ORDER-003");
+        order.reserve();
+
+        order.confirm();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void rejectsConfirmationWhenOrderIsNotReserved() {
+        PurchaseOrder order = PurchaseOrder.create("ORDER-004");
+
+        assertThatThrownBy(order::confirm)
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessage("Only reserved orders can be confirmed");
+    }
 }

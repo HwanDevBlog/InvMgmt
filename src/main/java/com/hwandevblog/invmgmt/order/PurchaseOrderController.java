@@ -45,4 +45,14 @@ public class PurchaseOrderController {
                 OrderResponse.class,
                 () -> orderService.reserve(orderId));
     }
+
+    @PostMapping("/{orderId}/confirm")
+    OrderResponse confirm(@PathVariable long orderId,
+                          @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return idempotencyService.execute(
+                idempotencyKey,
+                "CONFIRM_ORDER:" + orderId,
+                OrderResponse.class,
+                () -> orderService.confirm(orderId));
+    }
 }

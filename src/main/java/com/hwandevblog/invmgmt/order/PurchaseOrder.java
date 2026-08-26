@@ -75,6 +75,14 @@ public class PurchaseOrder {
         this.updatedAt = Instant.now();
     }
 
+    public void confirm() {
+        if (status != OrderStatus.RESERVED) {
+            throw new BusinessConflictException("Only reserved orders can be confirmed");
+        }
+        this.status = OrderStatus.CONFIRMED;
+        this.updatedAt = Instant.now();
+    }
+
     public Long getId() {
         return id;
     }
