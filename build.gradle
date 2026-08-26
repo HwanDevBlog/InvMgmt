@@ -33,16 +33,19 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// PostgreSQL 네이티브 도구가 한글 Windows에서 출력하는 메시지만 영문으로 고정한다.
 	environment 'LC_ALL', 'C'
 	environment 'LANG', 'C'
 }
 
+// 컨테이너가 없는 로컬 환경에서 테스트용 PostgreSQL과 애플리케이션을 함께 실행한다.
 tasks.register('localRun', JavaExec) {
 	group = 'application'
 	description = 'Runs the application with a local embedded PostgreSQL 16 instance.'
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = 'com.hwandevblog.invmgmt.LocalApplication'
 	args '--server.port=18080'
+	// Gradle이 시작한 Java 프로세스와 그 자식 PostgreSQL 프로세스에만 적용된다.
 	environment 'LC_ALL', 'C'
 	environment 'LANG', 'C'
 }

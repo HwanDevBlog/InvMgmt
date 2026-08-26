@@ -14,6 +14,10 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 
+/**
+ * 재고 변동량과 변동 직후 잔액을 함께 기록하는 원장 엔티티다.
+ * 현재 수량은 {@link Stock}이 담당하고, 이 엔티티는 변경 원인과 결과를 추적하는 데 사용한다.
+ */
 @Entity
 @Table(name = "stock_ledger")
 public class StockLedger {
@@ -30,12 +34,15 @@ public class StockLedger {
     @Column(name = "movement_type", nullable = false, length = 20)
     private StockMovementType movementType;
 
+    // 양수는 입고·복구, 음수는 예약·차감처럼 한 번의 재고 증감을 표현한다.
     @Column(name = "quantity_delta", nullable = false)
     private long quantityDelta;
 
+    // 원장만 조회해도 해당 변경 직후의 재고 상태를 확인할 수 있도록 잔액을 함께 남긴다.
     @Column(name = "balance_after", nullable = false)
     private long balanceAfter;
 
+    // 주문 등 재고 변경을 발생시킨 업무 데이터와 연결하기 위한 참조 정보다.
     @Column(name = "reference_type", length = 30)
     private String referenceType;
 
@@ -63,6 +70,7 @@ public class StockLedger {
     }
 
     public static StockLedger initial(Product product, long quantity) {
+        // 최초 원장은 증감량과 변경 후 잔액이 모두 초기 재고 수량과 같다.
         return new StockLedger(product, StockMovementType.INITIAL, quantity, quantity, "PRODUCT", null);
     }
 

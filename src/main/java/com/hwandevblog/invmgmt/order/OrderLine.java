@@ -30,6 +30,7 @@ public class OrderLine {
     @Column(nullable = false)
     private long quantity;
 
+    // 부분 반품을 지원하기 위해 주문 수량과 별도로 누적 반품 수량을 관리한다.
     @Column(name = "returned_quantity", nullable = false)
     private long returnedQuantity;
 

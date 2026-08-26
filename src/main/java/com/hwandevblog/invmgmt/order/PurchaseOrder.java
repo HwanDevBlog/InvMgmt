@@ -18,6 +18,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * 주문 상태와 주문 항목의 생명주기를 함께 관리하는 주문 애그리거트 루트다.
+ */
 @Entity
 @Table(name = "purchase_orders")
 public class PurchaseOrder {
@@ -33,6 +36,7 @@ public class PurchaseOrder {
     @Column(nullable = false, length = 20)
     private OrderStatus status;
 
+    // 주문 항목은 주문을 통해서만 추가·제거되며 주문과 함께 저장된다.
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id asc")
     private List<OrderLine> lines = new ArrayList<>();

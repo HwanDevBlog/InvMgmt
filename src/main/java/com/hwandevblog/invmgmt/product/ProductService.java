@@ -30,6 +30,7 @@ public class ProductService {
             throw new DuplicateResourceException("SKU already exists: " + request.sku());
         }
 
+        // 상품, 현재 재고, 최초 원장은 하나의 트랜잭션에서 생성해 시작 수량을 일치시킨다.
         Product product = productRepository.save(Product.create(request.sku(), request.name()));
         Stock stock = stockRepository.save(Stock.initialize(product, request.initialQuantity()));
         stockLedgerRepository.save(StockLedger.initial(product, request.initialQuantity()));
