@@ -18,4 +18,17 @@ class StockLedgerDomainTest {
         assertThat(ledger.getReferenceType()).isEqualTo("ORDER");
         assertThat(ledger.getReferenceId()).isEqualTo("15");
     }
+
+    @Test
+    void createsCancellationLedgerWithPositiveDeltaAndOrderReference() {
+        Product product = Product.create("SKU-CANCEL-LEDGER", "Cancel Ledger Product");
+
+        StockLedger ledger = StockLedger.cancel(product, 3, 10, 16L);
+
+        assertThat(ledger.getMovementType()).isEqualTo(StockMovementType.CANCEL);
+        assertThat(ledger.getQuantityDelta()).isEqualTo(3);
+        assertThat(ledger.getBalanceAfter()).isEqualTo(10);
+        assertThat(ledger.getReferenceType()).isEqualTo("ORDER");
+        assertThat(ledger.getReferenceId()).isEqualTo("16");
+    }
 }

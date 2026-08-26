@@ -46,4 +46,24 @@ class ProductDomainTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Reservation quantity must be positive");
     }
+
+    @Test
+    void restoresStockQuantity() {
+        Product product = Product.create("SKU-005", "Chair");
+        Stock stock = Stock.initialize(product, 7);
+
+        stock.restore(3);
+
+        assertThat(stock.getQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void rejectsNonPositiveRestorationQuantity() {
+        Product product = Product.create("SKU-006", "Lamp");
+        Stock stock = Stock.initialize(product, 7);
+
+        assertThatThrownBy(() -> stock.restore(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Restoration quantity must be positive");
+    }
 }

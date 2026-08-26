@@ -62,6 +62,13 @@ public class Stock {
         this.quantity -= quantity;
     }
 
+    public void restore(long quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Restoration quantity must be positive");
+        }
+        this.quantity += quantity;
+    }
+
     public Long getProductId() {
         return productId;
     }

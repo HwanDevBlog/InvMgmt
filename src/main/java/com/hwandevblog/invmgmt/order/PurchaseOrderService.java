@@ -64,8 +64,7 @@ public class PurchaseOrderService {
 
     @Transactional
     public OrderResponse reserve(long orderId) {
-        PurchaseOrder order = orderRepository.findWithLinesById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+        PurchaseOrder order = findForUpdate(orderId);
 
         order.reserve();
         order.getLines().forEach(line -> {
@@ -85,12 +84,37 @@ public class PurchaseOrderService {
 
     @Transactional
     public OrderResponse confirm(long orderId) {
-        PurchaseOrder order = orderRepository.findWithLinesById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+        PurchaseOrder order = findForUpdate(orderId);
 
         // 재고는 예약 시점에 이미 차감했으므로 확정에서는 주문 상태만 전환한다.
         order.confirm();
         return OrderResponse.from(order);
+    }
+
+    @Transactional
+    public OrderResponse cancel(long orderId) {
+        PurchaseOrder order = findForUpdate(orderId);
+
+        order.cancel();
+        order.getLines().forEach(line -> {
+            Stock stock = stockRepository.findById(line.getProduct().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Stock not found: " + line.getProduct().getId()));
+            stock.restore(line.getQuantity());
+            stockLedgerRepository.save(StockLedger.cancel(
+                    line.getProduct(),
+                    line.getQuantity(),
+                    stock.getQuantity(),
+                    order.getId()));
+        });
+
+        return OrderResponse.from(order);
+    }
+
+    private PurchaseOrder findForUpdate(long orderId) {
+        // 상태 변경 명령을 주문별로 직렬화해 서로 다른 멱등키의 중복 처리를 막는다.
+        return orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
     }
 
     private void rejectDuplicateProducts(CreateOrderRequest request) {

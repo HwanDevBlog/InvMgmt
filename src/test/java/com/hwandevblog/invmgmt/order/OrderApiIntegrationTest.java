@@ -262,4 +262,82 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
         assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.CONFIRMED);
         assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
     }
+
+    @Test
+    void cancelsConfirmedOrderAndRestoresInventory() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-CANCEL", "Cancel Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-CANCEL-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+        orderService.reserve(order.id());
+        orderService.confirm(order.id());
+
+        mockMvc.perform(post("/api/orders/{orderId}/cancel", order.id())
+                        .header("Idempotency-Key", "cancel-success-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELED"));
+
+        Long ledgerSum = jdbcTemplate.queryForObject(
+                "select sum(quantity_delta) from stock_ledger where product_id = ?",
+                Long.class,
+                product.id());
+        Long cancellationDelta = jdbcTemplate.queryForObject(
+                "select quantity_delta from stock_ledger "
+                        + "where product_id = ? and movement_type = 'CANCEL'",
+                Long.class,
+                product.id());
+
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
+        assertThat(ledgerSum).isEqualTo(10);
+        assertThat(cancellationDelta).isEqualTo(3);
+    }
+
+    @Test
+    void rejectsCancellationUnlessOrderIsConfirmed() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-CANCEL-STATE", "Cancel State Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-CANCEL-STATE-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+        orderService.reserve(order.id());
+
+        mockMvc.perform(post("/api/orders/{orderId}/cancel", order.id())
+                        .header("Idempotency-Key", "cancel-invalid-state-001"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Only confirmed orders can be canceled"));
+
+        assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.RESERVED);
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+    }
+
+    @Test
+    void replaysCompletedCancellationForSameIdempotencyKey() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-CANCEL-IDEMPOTENT", "Cancel Idempotent Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-CANCEL-IDEMPOTENT-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+        orderService.reserve(order.id());
+        orderService.confirm(order.id());
+
+        mockMvc.perform(post("/api/orders/{orderId}/cancel", order.id())
+                        .header("Idempotency-Key", "cancel-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELED"));
+
+        mockMvc.perform(post("/api/orders/{orderId}/cancel", order.id())
+                        .header("Idempotency-Key", "cancel-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELED"));
+
+        Integer cancellationLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'CANCEL'",
+                Integer.class,
+                product.id());
+
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
+        assertThat(cancellationLedgerCount).isEqualTo(1);
+    }
 }

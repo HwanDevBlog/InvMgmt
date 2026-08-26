@@ -83,6 +83,14 @@ public class PurchaseOrder {
         this.updatedAt = Instant.now();
     }
 
+    public void cancel() {
+        if (status != OrderStatus.CONFIRMED) {
+            throw new BusinessConflictException("Only confirmed orders can be canceled");
+        }
+        this.status = OrderStatus.CANCELED;
+        this.updatedAt = Instant.now();
+    }
+
     public Long getId() {
         return id;
     }

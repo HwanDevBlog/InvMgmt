@@ -55,4 +55,14 @@ public class PurchaseOrderController {
                 OrderResponse.class,
                 () -> orderService.confirm(orderId));
     }
+
+    @PostMapping("/{orderId}/cancel")
+    OrderResponse cancel(@PathVariable long orderId,
+                         @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return idempotencyService.execute(
+                idempotencyKey,
+                "CANCEL_ORDER:" + orderId,
+                OrderResponse.class,
+                () -> orderService.cancel(orderId));
+    }
 }

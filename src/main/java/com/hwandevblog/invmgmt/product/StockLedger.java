@@ -87,6 +87,19 @@ public class StockLedger {
                 Long.toString(orderId));
     }
 
+    public static StockLedger cancel(Product product, long quantity, long balanceAfter, long orderId) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Cancellation quantity must be positive");
+        }
+        return new StockLedger(
+                product,
+                StockMovementType.CANCEL,
+                quantity,
+                balanceAfter,
+                "ORDER",
+                Long.toString(orderId));
+    }
+
     public Long getId() {
         return id;
     }

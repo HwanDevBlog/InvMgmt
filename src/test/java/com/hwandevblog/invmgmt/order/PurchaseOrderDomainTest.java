@@ -45,4 +45,25 @@ class PurchaseOrderDomainTest {
                 .isInstanceOf(BusinessConflictException.class)
                 .hasMessage("Only reserved orders can be confirmed");
     }
+
+    @Test
+    void changesConfirmedOrderToCanceled() {
+        PurchaseOrder order = PurchaseOrder.create("ORDER-005");
+        order.reserve();
+        order.confirm();
+
+        order.cancel();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+    }
+
+    @Test
+    void rejectsCancellationWhenOrderIsNotConfirmed() {
+        PurchaseOrder order = PurchaseOrder.create("ORDER-006");
+        order.reserve();
+
+        assertThatThrownBy(order::cancel)
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessage("Only confirmed orders can be canceled");
+    }
 }
