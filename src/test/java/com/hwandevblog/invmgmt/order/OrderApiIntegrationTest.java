@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -339,5 +340,192 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
 
         assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
         assertThat(cancellationLedgerCount).isEqualTo(1);
+    }
+
+    @Test
+    void partiallyReturnsConfirmedOrderAndRestoresRequestedQuantity() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-RETURN-PARTIAL", "Partial Return Product", 10));
+        OrderResponse order = confirmedOrder(
+                "ORDER-RETURN-PARTIAL-001", product.id(), 5);
+        long orderLineId = order.lines().getFirst().id();
+
+        mockMvc.perform(post("/api/orders/{orderId}/returns", order.id())
+                        .header("Idempotency-Key", "return-partial-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "lines": [{"orderLineId": %d, "quantity": 2}]
+                                }
+                                """.formatted(orderLineId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.lines[0].returnedQuantity").value(2));
+
+        Long ledgerSum = jdbcTemplate.queryForObject(
+                "select sum(quantity_delta) from stock_ledger where product_id = ?",
+                Long.class,
+                product.id());
+        String returnReferenceType = jdbcTemplate.queryForObject(
+                "select reference_type from stock_ledger "
+                        + "where product_id = ? and movement_type = 'RETURN'",
+                String.class,
+                product.id());
+
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+        assertThat(ledgerSum).isEqualTo(7);
+        assertThat(returnReferenceType).isEqualTo("ORDER_LINE");
+    }
+
+    @Test
+    void changesOrderToReturnedAfterRemainingQuantityIsReturned() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-RETURN-FULL", "Full Return Product", 10));
+        OrderResponse order = confirmedOrder(
+                "ORDER-RETURN-FULL-001", product.id(), 5);
+        long orderLineId = order.lines().getFirst().id();
+
+        performReturn(order.id(), orderLineId, 2, "return-full-001")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        performReturn(order.id(), orderLineId, 3, "return-full-002")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RETURNED"))
+                .andExpect(jsonPath("$.lines[0].returnedQuantity").value(5));
+
+        Integer returnLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'RETURN'",
+                Integer.class,
+                product.id());
+
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
+        assertThat(returnLedgerCount).isEqualTo(2);
+    }
+
+    @Test
+    void rejectsReturnQuantityGreaterThanRemainingWithoutChangingInventory() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-RETURN-EXCESS", "Excess Return Product", 10));
+        OrderResponse order = confirmedOrder(
+                "ORDER-RETURN-EXCESS-001", product.id(), 5);
+        long orderLineId = order.lines().getFirst().id();
+
+        performReturn(order.id(), orderLineId, 6, "return-excess-001")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        "Return quantity exceeds remaining quantity"));
+
+        Integer returnLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'RETURN'",
+                Integer.class,
+                product.id());
+
+        assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(orderService.get(order.id()).lines().getFirst().returnedQuantity()).isZero();
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(5);
+        assertThat(returnLedgerCount).isZero();
+    }
+
+    @Test
+    void replaysCompletedReturnForSameIdempotencyKey() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-RETURN-IDEMPOTENT", "Idempotent Return Product", 10));
+        OrderResponse order = confirmedOrder(
+                "ORDER-RETURN-IDEMPOTENT-001", product.id(), 5);
+        long orderLineId = order.lines().getFirst().id();
+
+        performReturn(order.id(), orderLineId, 2, "return-idempotent-001")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines[0].returnedQuantity").value(2));
+
+        performReturn(order.id(), orderLineId, 2, "return-idempotent-001")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines[0].returnedQuantity").value(2));
+
+        Integer returnLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'RETURN'",
+                Integer.class,
+                product.id());
+
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+        assertThat(returnLedgerCount).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsSameIdempotencyKeyUsedForDifferentReturnQuantity() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-RETURN-KEY-CONFLICT", "Return Key Conflict Product", 10));
+        OrderResponse order = confirmedOrder(
+                "ORDER-RETURN-KEY-CONFLICT-001", product.id(), 5);
+        long orderLineId = order.lines().getFirst().id();
+
+        performReturn(order.id(), orderLineId, 2, "return-key-conflict-001")
+                .andExpect(status().isOk());
+
+        performReturn(order.id(), orderLineId, 1, "return-key-conflict-001")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        "Idempotency key was already used for a different request"));
+
+        assertThat(orderService.get(order.id()).lines().getFirst().returnedQuantity()).isEqualTo(2);
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+    }
+
+    @Test
+    void rejectsDuplicateOrderLinesInSingleReturnRequest() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-RETURN-DUPLICATE", "Duplicate Return Product", 10));
+        OrderResponse order = confirmedOrder(
+                "ORDER-RETURN-DUPLICATE-001", product.id(), 5);
+        long orderLineId = order.lines().getFirst().id();
+
+        mockMvc.perform(post("/api/orders/{orderId}/returns", order.id())
+                        .header("Idempotency-Key", "return-duplicate-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "lines": [
+                                    {"orderLineId": %d, "quantity": 1},
+                                    {"orderLineId": %d, "quantity": 1}
+                                  ]
+                                }
+                                """.formatted(orderLineId, orderLineId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        "A return cannot contain duplicate order lines"));
+
+        Integer returnLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'RETURN'",
+                Integer.class,
+                product.id());
+
+        assertThat(orderService.get(order.id()).lines().getFirst().returnedQuantity()).isZero();
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(5);
+        assertThat(returnLedgerCount).isZero();
+    }
+
+    private OrderResponse confirmedOrder(String orderNumber, long productId, long quantity) {
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                orderNumber,
+                List.of(new CreateOrderRequest.Line(productId, quantity))));
+        orderService.reserve(order.id());
+        return orderService.confirm(order.id());
+    }
+
+    private ResultActions performReturn(
+            long orderId, long orderLineId, long quantity, String idempotencyKey) throws Exception {
+        return mockMvc.perform(post("/api/orders/{orderId}/returns", orderId)
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "lines": [{"orderLineId": %d, "quantity": %d}]
+                        }
+                        """.formatted(orderLineId, quantity)));
     }
 }

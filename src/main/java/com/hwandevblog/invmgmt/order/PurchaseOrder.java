@@ -91,6 +91,21 @@ public class PurchaseOrder {
         this.updatedAt = Instant.now();
     }
 
+    public void returnItem(OrderLine line, long quantity) {
+        if (status != OrderStatus.CONFIRMED) {
+            throw new BusinessConflictException("Only confirmed orders can be returned");
+        }
+        if (!lines.contains(line)) {
+            throw new IllegalArgumentException("Order line does not belong to this order");
+        }
+
+        line.returnQuantity(quantity);
+        if (lines.stream().allMatch(OrderLine::isFullyReturned)) {
+            status = OrderStatus.RETURNED;
+        }
+        updatedAt = Instant.now();
+    }
+
     public Long getId() {
         return id;
     }

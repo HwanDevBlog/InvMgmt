@@ -100,6 +100,20 @@ public class StockLedger {
                 Long.toString(orderId));
     }
 
+    public static StockLedger returned(Product product, long quantity,
+                                       long balanceAfter, long orderLineId) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Return quantity must be positive");
+        }
+        return new StockLedger(
+                product,
+                StockMovementType.RETURN,
+                quantity,
+                balanceAfter,
+                "ORDER_LINE",
+                Long.toString(orderLineId));
+    }
+
     public Long getId() {
         return id;
     }

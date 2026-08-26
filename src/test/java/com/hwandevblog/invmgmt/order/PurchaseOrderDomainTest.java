@@ -1,6 +1,7 @@
 package com.hwandevblog.invmgmt.order;
 
 import com.hwandevblog.invmgmt.common.BusinessConflictException;
+import com.hwandevblog.invmgmt.product.Product;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,5 +66,58 @@ class PurchaseOrderDomainTest {
         assertThatThrownBy(order::cancel)
                 .isInstanceOf(BusinessConflictException.class)
                 .hasMessage("Only confirmed orders can be canceled");
+    }
+
+    @Test
+    void keepsConfirmedStateWhileOrderIsPartiallyReturned() {
+        PurchaseOrder order = confirmedOrder("ORDER-007", 5);
+        OrderLine line = order.getLines().getFirst();
+
+        order.returnItem(line, 2);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(line.getReturnedQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void changesOrderToReturnedWhenEveryQuantityIsReturned() {
+        PurchaseOrder order = confirmedOrder("ORDER-008", 5);
+        OrderLine line = order.getLines().getFirst();
+        order.returnItem(line, 2);
+
+        order.returnItem(line, 3);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURNED);
+        assertThat(line.getReturnedQuantity()).isEqualTo(5);
+    }
+
+    @Test
+    void rejectsReturnQuantityGreaterThanRemainingQuantity() {
+        PurchaseOrder order = confirmedOrder("ORDER-009", 5);
+        OrderLine line = order.getLines().getFirst();
+
+        assertThatThrownBy(() -> order.returnItem(line, 6))
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessage("Return quantity exceeds remaining quantity");
+        assertThat(line.getReturnedQuantity()).isZero();
+    }
+
+    @Test
+    void rejectsReturnWhenOrderIsNotConfirmed() {
+        PurchaseOrder order = PurchaseOrder.create("ORDER-010");
+        order.addLine(Product.create("SKU-RETURN-002", "Return Product 2"), 5);
+        OrderLine line = order.getLines().getFirst();
+
+        assertThatThrownBy(() -> order.returnItem(line, 1))
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessage("Only confirmed orders can be returned");
+    }
+
+    private PurchaseOrder confirmedOrder(String orderNumber, long quantity) {
+        PurchaseOrder order = PurchaseOrder.create(orderNumber);
+        order.addLine(Product.create("SKU-" + orderNumber, "Return Product"), quantity);
+        order.reserve();
+        order.confirm();
+        return order;
     }
 }

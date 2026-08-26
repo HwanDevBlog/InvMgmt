@@ -1,5 +1,6 @@
 package com.hwandevblog.invmgmt.order;
 
+import com.hwandevblog.invmgmt.common.BusinessConflictException;
 import com.hwandevblog.invmgmt.product.Product;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -49,6 +50,20 @@ public class OrderLine {
 
     static OrderLine create(PurchaseOrder order, Product product, long quantity) {
         return new OrderLine(order, product, quantity);
+    }
+
+    void returnQuantity(long quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Return quantity must be positive");
+        }
+        if (returnedQuantity + quantity > this.quantity) {
+            throw new BusinessConflictException("Return quantity exceeds remaining quantity");
+        }
+        returnedQuantity += quantity;
+    }
+
+    boolean isFullyReturned() {
+        return returnedQuantity == quantity;
     }
 
     public Long getId() {

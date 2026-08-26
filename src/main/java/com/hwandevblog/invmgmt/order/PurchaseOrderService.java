@@ -111,6 +111,33 @@ public class PurchaseOrderService {
         return OrderResponse.from(order);
     }
 
+    @Transactional
+    public OrderResponse returnItems(long orderId, ReturnOrderRequest request) {
+        rejectDuplicateOrderLines(request);
+        PurchaseOrder order = findForUpdate(orderId);
+
+        request.lines().forEach(returnLine -> {
+            OrderLine orderLine = order.getLines().stream()
+                    .filter(line -> line.getId().equals(returnLine.orderLineId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Order line not found in order: " + returnLine.orderLineId()));
+
+            order.returnItem(orderLine, returnLine.quantity());
+            Stock stock = stockRepository.findById(orderLine.getProduct().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Stock not found: " + orderLine.getProduct().getId()));
+            stock.restore(returnLine.quantity());
+            stockLedgerRepository.save(StockLedger.returned(
+                    orderLine.getProduct(),
+                    returnLine.quantity(),
+                    stock.getQuantity(),
+                    orderLine.getId()));
+        });
+
+        return OrderResponse.from(order);
+    }
+
     private PurchaseOrder findForUpdate(long orderId) {
         // 상태 변경 명령을 주문별로 직렬화해 서로 다른 멱등키의 중복 처리를 막는다.
         return orderRepository.findByIdForUpdate(orderId)
@@ -125,6 +152,16 @@ public class PurchaseOrderService {
                 .anyMatch(productId -> !productIds.add(productId));
         if (duplicate) {
             throw new IllegalArgumentException("An order cannot contain duplicate product lines");
+        }
+    }
+
+    private void rejectDuplicateOrderLines(ReturnOrderRequest request) {
+        Set<Long> orderLineIds = new HashSet<>();
+        boolean duplicate = request.lines().stream()
+                .map(ReturnOrderRequest.Line::orderLineId)
+                .anyMatch(orderLineId -> !orderLineIds.add(orderLineId));
+        if (duplicate) {
+            throw new IllegalArgumentException("A return cannot contain duplicate order lines");
         }
     }
 }

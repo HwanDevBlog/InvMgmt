@@ -65,4 +65,15 @@ public class PurchaseOrderController {
                 OrderResponse.class,
                 () -> orderService.cancel(orderId));
     }
+
+    @PostMapping("/{orderId}/returns")
+    OrderResponse returnItems(@PathVariable long orderId,
+                              @RequestHeader("Idempotency-Key") String idempotencyKey,
+                              @Valid @RequestBody ReturnOrderRequest request) {
+        return idempotencyService.execute(
+                idempotencyKey,
+                "RETURN_ORDER:" + orderId + ":" + request.canonicalIdentity(),
+                OrderResponse.class,
+                () -> orderService.returnItems(orderId, request));
+    }
 }
