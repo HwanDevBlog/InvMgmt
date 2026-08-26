@@ -74,6 +74,19 @@ public class StockLedger {
         return new StockLedger(product, StockMovementType.INITIAL, quantity, quantity, "PRODUCT", null);
     }
 
+    public static StockLedger reserve(Product product, long quantity, long balanceAfter, long orderId) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Reservation quantity must be positive");
+        }
+        return new StockLedger(
+                product,
+                StockMovementType.RESERVE,
+                -quantity,
+                balanceAfter,
+                "ORDER",
+                Long.toString(orderId));
+    }
+
     public Long getId() {
         return id;
     }

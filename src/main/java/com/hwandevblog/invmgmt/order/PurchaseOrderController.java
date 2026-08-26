@@ -30,4 +30,9 @@ public class PurchaseOrderController {
     OrderResponse get(@PathVariable long orderId) {
         return orderService.get(orderId);
     }
+
+    @PostMapping("/{orderId}/reserve")
+    OrderResponse reserve(@PathVariable long orderId) {
+        return orderService.reserve(orderId);
+    }
 }

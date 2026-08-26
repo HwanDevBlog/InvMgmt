@@ -1,5 +1,6 @@
 package com.hwandevblog.invmgmt.product;
 
+import com.hwandevblog.invmgmt.common.BusinessConflictException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -49,6 +50,16 @@ public class Stock {
 
     public static Stock initialize(Product product, long quantity) {
         return new Stock(product, quantity);
+    }
+
+    public void reserve(long quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Reservation quantity must be positive");
+        }
+        if (this.quantity < quantity) {
+            throw new BusinessConflictException("Insufficient stock");
+        }
+        this.quantity -= quantity;
     }
 
     public Long getProductId() {

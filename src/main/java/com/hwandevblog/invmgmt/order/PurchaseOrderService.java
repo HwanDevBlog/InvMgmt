@@ -4,6 +4,10 @@ import com.hwandevblog.invmgmt.common.DuplicateResourceException;
 import com.hwandevblog.invmgmt.common.ResourceNotFoundException;
 import com.hwandevblog.invmgmt.product.Product;
 import com.hwandevblog.invmgmt.product.ProductRepository;
+import com.hwandevblog.invmgmt.product.Stock;
+import com.hwandevblog.invmgmt.product.StockLedger;
+import com.hwandevblog.invmgmt.product.StockLedgerRepository;
+import com.hwandevblog.invmgmt.product.StockRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,11 +20,17 @@ public class PurchaseOrderService {
 
     private final PurchaseOrderRepository orderRepository;
     private final ProductRepository productRepository;
+    private final StockRepository stockRepository;
+    private final StockLedgerRepository stockLedgerRepository;
 
     public PurchaseOrderService(PurchaseOrderRepository orderRepository,
-                                ProductRepository productRepository) {
+                                ProductRepository productRepository,
+                                StockRepository stockRepository,
+                                StockLedgerRepository stockLedgerRepository) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
+        this.stockRepository = stockRepository;
+        this.stockLedgerRepository = stockLedgerRepository;
     }
 
     @Transactional
@@ -49,6 +59,27 @@ public class PurchaseOrderService {
     public OrderResponse get(long orderId) {
         PurchaseOrder order = orderRepository.findWithLinesById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+        return OrderResponse.from(order);
+    }
+
+    @Transactional
+    public OrderResponse reserve(long orderId) {
+        PurchaseOrder order = orderRepository.findWithLinesById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+
+        order.reserve();
+        order.getLines().forEach(line -> {
+            Stock stock = stockRepository.findById(line.getProduct().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Stock not found: " + line.getProduct().getId()));
+            stock.reserve(line.getQuantity());
+            stockLedgerRepository.save(StockLedger.reserve(
+                    line.getProduct(),
+                    line.getQuantity(),
+                    stock.getQuantity(),
+                    order.getId()));
+        });
+
         return OrderResponse.from(order);
     }
 

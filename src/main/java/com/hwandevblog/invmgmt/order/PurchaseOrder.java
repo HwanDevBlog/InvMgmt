@@ -1,5 +1,6 @@
 package com.hwandevblog.invmgmt.order;
 
+import com.hwandevblog.invmgmt.common.BusinessConflictException;
 import com.hwandevblog.invmgmt.product.Product;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -63,6 +64,14 @@ public class PurchaseOrder {
 
     public void addLine(Product product, long quantity) {
         lines.add(OrderLine.create(this, product, quantity));
+        this.updatedAt = Instant.now();
+    }
+
+    public void reserve() {
+        if (status != OrderStatus.CREATED) {
+            throw new BusinessConflictException("Only created orders can be reserved");
+        }
+        this.status = OrderStatus.RESERVED;
         this.updatedAt = Instant.now();
     }
 
