@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Long> {
 
@@ -15,6 +16,9 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @EntityGraph(attributePaths = {"lines", "lines.product"})
     Optional<PurchaseOrder> findWithLinesById(Long id);
+
+    @EntityGraph(attributePaths = {"lines", "lines.product"})
+    List<PurchaseOrder> findAllByOrderByCreatedAtDesc();
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select purchaseOrder from PurchaseOrder purchaseOrder where purchaseOrder.id = :id")

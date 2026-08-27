@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/orders")
 @Tag(name = "주문", description = "주문의 생성, 예약, 확정, 취소와 반품을 처리합니다.")
@@ -33,6 +35,12 @@ public class PurchaseOrderController {
     @Operation(summary = "주문 생성")
     OrderResponse create(@Valid @RequestBody CreateOrderRequest request) {
         return orderService.create(request);
+    }
+
+    @GetMapping
+    @Operation(summary = "주문 목록 조회")
+    List<OrderResponse> list() {
+        return orderService.list();
     }
 
     @GetMapping("/{orderId}")

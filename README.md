@@ -105,7 +105,9 @@ Windows에서 전체 테스트 실행:
 | `POST` | `/api/products` | 상품과 초기 재고 등록 |
 | `GET` | `/api/products` | 상품 목록 조회 |
 | `GET` | `/api/stocks` | 현재고 목록 조회 |
+| `GET` | `/api/stock-ledgers` | 재고 거래 이력 조회 |
 | `POST` | `/api/orders` | 주문 생성 |
+| `GET` | `/api/orders` | 주문 목록 조회 |
 | `GET` | `/api/orders/{orderId}` | 주문 조회 |
 | `POST` | `/api/orders/{orderId}/reserve` | 주문 재고 예약 |
 | `POST` | `/api/orders/{orderId}/confirm` | 주문 확정 |

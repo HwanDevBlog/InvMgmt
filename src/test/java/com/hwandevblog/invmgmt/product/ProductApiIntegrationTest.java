@@ -54,6 +54,13 @@ class ProductApiIntegrationTest extends PostgresIntegrationTest {
         mockMvc.perform(get("/api/stocks"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sku").value("SKU-001"));
+
+        mockMvc.perform(get("/api/stock-ledgers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sku").value("SKU-001"))
+                .andExpect(jsonPath("$[0].movementType").value("INITIAL"))
+                .andExpect(jsonPath("$[0].quantityDelta").value(25))
+                .andExpect(jsonPath("$[0].balanceAfter").value(25));
     }
 
     @Test

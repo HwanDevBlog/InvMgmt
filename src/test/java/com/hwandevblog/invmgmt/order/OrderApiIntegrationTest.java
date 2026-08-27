@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -61,6 +62,12 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.lines[0].quantity").value(3));
 
         assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
+
+        mockMvc.perform(get("/api/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].orderNumber").value("ORDER-001"))
+                .andExpect(jsonPath("$[0].status").value("CREATED"))
+                .andExpect(jsonPath("$[0].lines[0].sku").value("SKU-ORDER"));
     }
 
     @Test
