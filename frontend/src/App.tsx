@@ -1,25 +1,24 @@
-const modules = [
-  {
-    number: '01',
-    title: '재고 현황',
-    description: '상품별 현재 수량과 재고 상태를 한눈에 확인합니다.',
-    path: '/api/stocks',
-  },
-  {
-    number: '02',
-    title: '재고 거래 이력',
-    description: '예약, 취소, 반품으로 발생한 재고 변동을 추적합니다.',
-    path: '/api/stock-ledgers',
-  },
-  {
-    number: '03',
-    title: '주문 상태 추적',
-    description: '주문별 처리 상태와 상품 수량 변화를 확인합니다.',
-    path: '/api/orders',
-  },
+import { useState } from 'react';
+import { StockPage } from './features/stock/StockPage';
+
+type PageKey = 'stocks' | 'ledgers' | 'orders';
+
+const navigation: Array<{ key: PageKey; label: string }> = [
+  { key: 'stocks', label: '재고 현황' },
+  { key: 'ledgers', label: '재고 거래 이력' },
+  { key: 'orders', label: '주문 상태 추적' },
 ];
 
+const pageDescriptions: Record<PageKey, string> = {
+  stocks: '상품별 현재 수량과 재고 상태를 확인합니다.',
+  ledgers: '예약, 취소, 반품으로 발생한 재고 변동을 추적합니다.',
+  orders: '주문별 처리 상태와 상품 수량 변화를 확인합니다.',
+};
+
 function App() {
+  const [activePage, setActivePage] = useState<PageKey>('stocks');
+  const activeLabel = navigation.find((item) => item.key === activePage)?.label ?? '';
+
   return (
     <div className="app-shell">
       <header className="top-bar">
@@ -27,42 +26,46 @@ function App() {
           <span className="brand-mark">IM</span>
           <span>InvMgmt</span>
         </a>
+        <nav aria-label="주요 업무">
+          {navigation.map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className={activePage === item.key ? 'active' : ''}
+              aria-current={activePage === item.key ? 'page' : undefined}
+              onClick={() => setActivePage(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
         <span className="environment-badge">LOCAL</span>
       </header>
 
       <main>
-        <section className="hero" aria-labelledby="page-title">
-          <p className="eyebrow">INVENTORY MANAGEMENT</p>
-          <h1 id="page-title">재고 흐름 관리</h1>
-          <p className="hero-description">
-            주문에서 시작된 재고 변화를 현재고와 원장 기준으로 확인합니다.
-          </p>
+        <section className="page-heading" aria-labelledby="page-title">
+          <div>
+            <p className="eyebrow">INVENTORY MANAGEMENT</p>
+            <h1 id="page-title">{activeLabel}</h1>
+            <p>{pageDescriptions[activePage]}</p>
+          </div>
           <div className="connection-status" role="status">
             <span className="status-dot" aria-hidden="true" />
-            백엔드 API 연결 준비
+            Spring Boot API
           </div>
         </section>
 
-        <section className="module-section" aria-labelledby="module-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">WORKSPACE</p>
-              <h2 id="module-title">업무 화면</h2>
-            </div>
-            <p>조회 화면부터 순서대로 연결합니다.</p>
-          </div>
-
-          <div className="module-grid">
-            {modules.map((module) => (
-              <article className="module-card" key={module.number}>
-                <span className="module-number">{module.number}</span>
-                <h3>{module.title}</h3>
-                <p>{module.description}</p>
-                <code>{module.path}</code>
-              </article>
-            ))}
-          </div>
-        </section>
+        <div className="page-content">
+          {activePage === 'stocks' ? (
+            <StockPage />
+          ) : (
+            <section className="content-state pending-state">
+              <span className="state-code">NEXT STEP</span>
+              <h2>{activeLabel}</h2>
+              <p>이 화면은 다음 구현 단계에서 API와 연결합니다.</p>
+            </section>
+          )}
+        </div>
       </main>
 
       <footer>
