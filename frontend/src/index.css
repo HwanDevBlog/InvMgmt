@@ -88,6 +88,20 @@ tbody tr:hover { background: #fafcf9; }
 .sku-cell { color: #31553d; font-weight: 700; }
 .quantity-cell { color: #17211b; font-variant-numeric: tabular-nums; font-weight: 700; }
 .version-cell { color: #7c8880; }
+.date-cell, .reference-cell {
+  color: #66736a; font-family: "Cascadia Code", Consolas, monospace; font-size: 11px;
+}
+.delta-cell { font-variant-numeric: tabular-nums; font-weight: 800; }
+.delta-cell.positive { color: #28633a; }
+.delta-cell.negative { color: #9a472f; }
+.delta-cell.neutral { color: #6f7a72; }
+.movement-badge {
+  display: inline-flex; padding: 5px 9px; color: #355044; background: #edf2ee;
+  border-radius: 6px; font-size: 11px; font-weight: 700;
+}
+.movement-reserve { color: #86472f; background: #f8e9df; }
+.movement-cancel, .movement-return { color: #28613a; background: #e5f2e4; }
+.movement-adjustment { color: #55528a; background: #ecebfa; }
 .stock-badge {
   display: inline-flex; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { StockLedgerPage } from './features/ledger/StockLedgerPage';
 import { StockPage } from './features/stock/StockPage';
 
 type PageKey = 'stocks' | 'ledgers' | 'orders';
@@ -56,9 +57,9 @@ function App() {
         </section>
 
         <div className="page-content">
-          {activePage === 'stocks' ? (
-            <StockPage />
-          ) : (
+          {activePage === 'stocks' && <StockPage />}
+          {activePage === 'ledgers' && <StockLedgerPage />}
+          {activePage === 'orders' && (
             <section className="content-state pending-state">
               <span className="state-code">NEXT STEP</span>
               <h2>{activeLabel}</h2>
