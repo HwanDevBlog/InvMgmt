@@ -22,6 +22,7 @@
 - 낙관적 락과 비관적 락 기반 동시성 제어
 - 현재고와 재고 원장의 정합성 대사
 - OpenAPI 문서와 Swagger UI
+- React 기반 재고 관리 화면
 - GitHub Actions 백엔드 테스트
 
 ## 핵심 설계
@@ -74,6 +75,7 @@ stateDiagram-v2
 | Database | PostgreSQL 16, Flyway |
 | Test | JUnit 5, AssertJ, MockMvc, Zonky Embedded PostgreSQL |
 | API Docs | springdoc-openapi, Swagger UI |
+| Frontend | React 18, TypeScript, Vite, TanStack Query, TanStack Table v8 |
 | Build / CI | Gradle Wrapper, GitHub Actions |
 
 ## 실행 방법
@@ -97,6 +99,24 @@ Windows에서 전체 테스트 실행:
 - Swagger UI: `http://localhost:18080/swagger-ui`
 - OpenAPI JSON: `http://localhost:18080/v3/api-docs`
 - 재고 정합성 대사: `http://localhost:18080/api/reconciliations/stocks`
+
+프론트엔드 의존성 설치와 개발 서버 실행:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+백엔드가 `18080` 포트에서 실행 중이면 프론트엔드의 `/api` 요청을 백엔드로 전달합니다. 프론트엔드 주소는 `http://localhost:5173`입니다.
+
+프론트엔드 타입 검사, 테스트, 빌드:
+
+```powershell
+npm run typecheck
+npm run test:run
+npm run build
+```
 
 ## 주요 API
 
@@ -131,7 +151,6 @@ GitHub Actions에서도 푸시와 Pull Request마다 PostgreSQL 16 기반 전체
 
 - 인증과 회원 관리
 - 운영 환경 배포 구성
-- React 기반 재고 현황·거래 이력·주문 추적 화면
 - 컨테이너 런타임을 이용한 실행 검증
 
-프론트엔드와 컨테이너 검증은 실행 환경을 준비한 뒤 후속 단계에서 추가할 예정입니다.
+컨테이너 검증은 허용된 실행 환경을 준비한 뒤 후속 단계에서 추가할 예정입니다.
