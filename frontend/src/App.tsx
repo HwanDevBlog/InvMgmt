@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { StockLedgerPage } from './features/ledger/StockLedgerPage';
+import { OrderPage } from './features/order/OrderPage';
 import { StockPage } from './features/stock/StockPage';
 
 type PageKey = 'stocks' | 'ledgers' | 'orders';
@@ -59,13 +60,7 @@ function App() {
         <div className="page-content">
           {activePage === 'stocks' && <StockPage />}
           {activePage === 'ledgers' && <StockLedgerPage />}
-          {activePage === 'orders' && (
-            <section className="content-state pending-state">
-              <span className="state-code">NEXT STEP</span>
-              <h2>{activeLabel}</h2>
-              <p>이 화면은 다음 구현 단계에서 API와 연결합니다.</p>
-            </section>
-          )}
+          {activePage === 'orders' && <OrderPage />}
         </div>
       </main>
 

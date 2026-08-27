@@ -102,6 +102,33 @@ tbody tr:hover { background: #fafcf9; }
 .movement-reserve { color: #86472f; background: #f8e9df; }
 .movement-cancel, .movement-return { color: #28613a; background: #e5f2e4; }
 .movement-adjustment { color: #55528a; background: #ecebfa; }
+.order-number-cell {
+  color: #264d35; font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px; font-weight: 700;
+}
+.order-status {
+  display: inline-flex; padding: 5px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+}
+.status-created { color: #535f57; background: #e9eeea; }
+.status-reserved { color: #7d5427; background: #f7ebd8; }
+.status-confirmed { color: #285b38; background: #e2f1e4; }
+.status-canceled, .status-expired { color: #8b4936; background: #f7e4df; }
+.status-returned { color: #45528a; background: #e8eafa; }
+.expand-button {
+  display: grid; width: 28px; height: 28px; place-items: center; color: #31553d;
+  background: #f2f6f2; border: 1px solid #d6e0d8; border-radius: 6px;
+  cursor: pointer; font-size: 18px; line-height: 1;
+}
+.order-detail-row > td { padding: 0 24px 22px; background: #fafcf9; }
+.order-lines { padding: 18px; background: #fff; border: 1px solid #dfe7e0; border-radius: 10px; }
+.order-lines-heading {
+  display: flex; justify-content: space-between; padding: 0 4px 14px;
+  color: #66736a; font-size: 12px;
+}
+.order-lines-heading strong { color: #263d2d; font-size: 13px; }
+.order-lines table { border: 1px solid #e4e9e4; }
+.order-lines th, .order-lines td { padding: 12px 16px; }
 .stock-badge {
   display: inline-flex; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
 }
