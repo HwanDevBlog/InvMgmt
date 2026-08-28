@@ -1,6 +1,7 @@
 # InvMgmt
 
 [![Backend CI](https://github.com/HwanDevBlog/InvMgmt/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/HwanDevBlog/InvMgmt/actions/workflows/backend-ci.yml)
+[![Frontend CI](https://github.com/HwanDevBlog/InvMgmt/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/HwanDevBlog/InvMgmt/actions/workflows/frontend-ci.yml)
 
 주문 처리 과정에서 발생하는 재고 차감, 취소, 반품과 재고 원장의 정합성을 다루는 토이 프로젝트입니다.
 
@@ -23,7 +24,7 @@
 - 현재고와 재고 원장의 정합성 대사
 - OpenAPI 문서와 Swagger UI
 - React 기반 재고 관리 화면
-- GitHub Actions 백엔드 테스트
+- GitHub Actions 백엔드·프론트엔드 검증
 
 ## 핵심 설계
 
@@ -144,8 +145,10 @@ npm run build
 - 취소와 부분·전체 반품 수량이 재고와 원장에 함께 반영되는지
 - 현재고와 원장 합계의 불일치를 대사 API가 찾아내는지
 - OpenAPI 문서에 핵심 업무 API가 포함되는지
+- 프론트엔드가 API 응답의 로딩·오류·빈 결과·성공 상태를 구분하는지
+- 재고, 거래 이력, 주문 화면의 주요 데이터가 표시되는지
 
-GitHub Actions에서도 푸시와 Pull Request마다 PostgreSQL 16 기반 전체 테스트를 실행합니다.
+GitHub Actions에서도 푸시와 Pull Request마다 PostgreSQL 16 기반 백엔드 테스트와 프론트엔드 타입 검사·테스트·빌드를 실행합니다.
 
 ## 현재 범위 밖의 항목
 
