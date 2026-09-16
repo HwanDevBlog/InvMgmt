@@ -1,10 +1,13 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   getExpandedRowModel,
+  getSortedRowModel,
   type Row,
+  type SortingState,
   useReactTable,
 } from '@tanstack/react-table';
 import { fetchOrders } from './api';
@@ -28,6 +31,7 @@ function sumReturnedQuantity(order: Order) {
 }
 
 const columnHelper = createColumnHelper<Order>();
+const emptyOrders: Order[] = [];
 const columns = [
   columnHelper.display({
     id: 'expand',
@@ -71,18 +75,31 @@ const columns = [
 ];
 
 export function OrderPage() {
+  const [search, setSearch] = useState('');
+  const [orderStatus, setOrderStatus] = useState('all');
+  const [sorting, setSorting] = useState<SortingState>([]);
   const orderQuery = useQuery({
     queryKey: ['orders'],
     queryFn: ({ signal }) => fetchOrders(signal),
   });
-  const orders = orderQuery.data ?? [];
+  const orders = orderQuery.data ?? emptyOrders;
   const totalLineCount = orders.reduce((sum, order) => sum + order.lines.length, 0);
   const totalReturnedQuantity = orders.reduce((sum, order) => sum + sumReturnedQuantity(order), 0);
+  const keyword = search.trim().toLocaleLowerCase();
+  const filteredOrders = useMemo(() => orders.filter((order) =>
+    (order.orderNumber.toLocaleLowerCase().includes(keyword)
+      || order.lines.some((line) => line.sku.toLocaleLowerCase().includes(keyword)))
+    && (orderStatus === 'all' || order.status === orderStatus),
+  ), [orders, keyword, orderStatus]);
   const table = useReactTable({
-    data: orders,
+    data: filteredOrders,
     columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    sortDescFirst: false,
     getRowCanExpand: () => true,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
   });
 
@@ -103,11 +120,36 @@ export function OrderPage() {
           <div><span>반품 수량</span><strong>{numberFormatter.format(totalReturnedQuantity)}</strong></div>
         </div>
       </div>
+      {orders.length > 0 ? (
+        <div className="filter-toolbar">
+          <label>주문 검색
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="주문 번호 또는 상품 코드" />
+          </label>
+          <label>주문 상태
+            <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}>
+              <option value="all">전체</option>
+              {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <span className="filter-count" role="status">조회 결과 {filteredOrders.length}건</span>
+        </div>
+      ) : null}
       {orders.length === 0 ? (
         <div className="empty-state"><span className="state-code">NO DATA</span><h3>등록된 주문이 없습니다</h3><p>주문이 생성되면 처리 상태와 상품 내역이 표시됩니다.</p></div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="empty-state"><span className="state-code">NO MATCH</span><h3>검색 결과가 없습니다</h3><p>검색어나 주문 상태를 바꿔 보세요.</p></div>
       ) : (
         <div className="table-scroll"><table><thead>
-          {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header) => <th key={header.id} scope="col">{header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}</th>)}</tr>)}
+          {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header) => (
+            <th key={header.id} scope="col" aria-sort={header.column.getIsSorted() === 'asc' ? 'ascending' : header.column.getIsSorted() === 'desc' ? 'descending' : undefined}>
+              {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                <button type="button" className="sort-button" onClick={header.column.getToggleSortingHandler()}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  <span aria-hidden="true">{header.column.getIsSorted() === 'asc' ? ' ↑' : header.column.getIsSorted() === 'desc' ? ' ↓' : ' ↕'}</span>
+                </button>
+              ) : flexRender(header.column.columnDef.header, header.getContext())}
+            </th>
+          ))}</tr>)}
         </thead><tbody>
           {table.getRowModel().rows.map((row) => (
             <OrderRow key={row.id} row={row} visibleColumnCount={row.getVisibleCells().length} />

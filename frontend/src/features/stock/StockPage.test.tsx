@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQueryClient } from '../../test/renderWithQueryClient';
 import { StockPage } from './StockPage';
@@ -36,8 +37,8 @@ describe('StockPage', () => {
 
     expect(await screen.findByText('기계식 키보드')).toBeInTheDocument();
     expect(screen.getByText('무선 마우스')).toBeInTheDocument();
-    expect(screen.getByText('재고 있음')).toBeInTheDocument();
-    expect(screen.getByText('품절')).toBeInTheDocument();
+    expect(within(screen.getByRole('table')).getByText('재고 있음')).toBeInTheDocument();
+    expect(within(screen.getByRole('table')).getByText('품절')).toBeInTheDocument();
     expect(screen.getByText('v3')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       '/api/stocks',
@@ -60,5 +61,25 @@ describe('StockPage', () => {
       '재고 정보를 불러오지 못했습니다',
     );
     expect(screen.getByRole('button', { name: '다시 불러오기' })).toBeInTheDocument();
+  });
+
+  it('상품 검색·상태 필터·수량 정렬을 적용한다', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [
+      { productId: 1, sku: 'SKU-001', productName: '기계식 키보드', quantity: 25, version: 3 },
+      { productId: 2, sku: 'SKU-002', productName: '무선 마우스', quantity: 0, version: 1 },
+    ] } as Response));
+    renderWithQueryClient(<StrictMode><StockPage /></StrictMode>);
+    expect(await screen.findByText('기계식 키보드')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: '상품 검색' }), { target: { value: '마우스' } });
+    expect(screen.getByRole('status')).toHaveTextContent('조회 결과 1건');
+    expect(screen.queryByText('기계식 키보드')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: '상품 검색' }), { target: { value: '' } });
+    fireEvent.change(screen.getByRole('combobox', { name: '재고 상태' }), { target: { value: 'empty' } });
+    expect(screen.queryByText('기계식 키보드')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: '재고 상태' }), { target: { value: 'all' } });
+    fireEvent.click(screen.getByRole('button', { name: '현재고' }));
+    expect(within(screen.getAllByRole('row')[1]).getByText('무선 마우스')).toBeInTheDocument();
   });
 });

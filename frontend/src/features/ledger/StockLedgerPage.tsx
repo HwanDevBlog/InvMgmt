@@ -1,8 +1,11 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getSortedRowModel,
+  type SortingState,
   useReactTable,
 } from '@tanstack/react-table';
 import { fetchStockLedgers } from './api';
@@ -28,6 +31,7 @@ function formatReference(referenceType: string | null, referenceId: string | nul
 }
 
 const columnHelper = createColumnHelper<StockLedger>();
+const emptyLedgers: StockLedger[] = [];
 const columns = [
   columnHelper.accessor('createdAt', {
     header: '발생 일시',
@@ -60,14 +64,28 @@ const columns = [
 ];
 
 export function StockLedgerPage() {
+  const [search, setSearch] = useState('');
+  const [movementType, setMovementType] = useState('all');
+  const [sorting, setSorting] = useState<SortingState>([]);
   const ledgerQuery = useQuery({
     queryKey: ['stock-ledgers'],
     queryFn: ({ signal }) => fetchStockLedgers(signal),
   });
-  const ledgers = ledgerQuery.data ?? [];
+  const ledgers = ledgerQuery.data ?? emptyLedgers;
   const increaseCount = ledgers.filter((ledger) => ledger.quantityDelta > 0).length;
   const decreaseCount = ledgers.filter((ledger) => ledger.quantityDelta < 0).length;
-  const table = useReactTable({ data: ledgers, columns, getCoreRowModel: getCoreRowModel() });
+  const keyword = search.trim().toLocaleLowerCase();
+  const filteredLedgers = useMemo(() => ledgers.filter((ledger) =>
+    (ledger.sku.toLocaleLowerCase().includes(keyword)
+      || ledger.productName.toLocaleLowerCase().includes(keyword)
+      || (ledger.referenceId ?? '').toLocaleLowerCase().includes(keyword))
+    && (movementType === 'all' || ledger.movementType === movementType),
+  ), [ledgers, keyword, movementType]);
+  const table = useReactTable({
+    data: filteredLedgers, columns, state: { sorting }, onSortingChange: setSorting,
+    sortDescFirst: false,
+    getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
+  });
 
   if (ledgerQuery.isPending) {
     return <section className="content-state" aria-live="polite"><span className="loading-indicator" aria-hidden="true" /><h2>재고 거래 이력을 불러오는 중입니다</h2><p>최근 재고 변동 기록을 확인하고 있습니다.</p></section>;
@@ -86,11 +104,36 @@ export function StockLedgerPage() {
           <div><span>감소 거래</span><strong>{quantityFormatter.format(decreaseCount)}</strong></div>
         </div>
       </div>
+      {ledgers.length > 0 ? (
+        <div className="filter-toolbar">
+          <label>거래 검색
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="상품 코드·상품명·참조 ID" />
+          </label>
+          <label>거래 유형
+            <select value={movementType} onChange={(event) => setMovementType(event.target.value)}>
+              <option value="all">전체</option>
+              {Object.entries(movementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <span className="filter-count" role="status">조회 결과 {filteredLedgers.length}건</span>
+        </div>
+      ) : null}
       {ledgers.length === 0 ? (
         <div className="empty-state"><span className="state-code">NO DATA</span><h3>재고 거래 이력이 없습니다</h3><p>상품 등록이나 주문 처리가 발생하면 재고 변동 기록이 표시됩니다.</p></div>
+      ) : filteredLedgers.length === 0 ? (
+        <div className="empty-state"><span className="state-code">NO MATCH</span><h3>검색 결과가 없습니다</h3><p>검색어나 거래 유형을 바꿔 보세요.</p></div>
       ) : (
         <div className="table-scroll"><table><thead>
-          {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header) => <th key={header.id} scope="col">{header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}</th>)}</tr>)}
+          {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header) => (
+            <th key={header.id} scope="col" aria-sort={header.column.getIsSorted() === 'asc' ? 'ascending' : header.column.getIsSorted() === 'desc' ? 'descending' : undefined}>
+              {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                <button type="button" className="sort-button" onClick={header.column.getToggleSortingHandler()}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  <span aria-hidden="true">{header.column.getIsSorted() === 'asc' ? ' ↑' : header.column.getIsSorted() === 'desc' ? ' ↓' : ' ↕'}</span>
+                </button>
+              ) : flexRender(header.column.columnDef.header, header.getContext())}
+            </th>
+          ))}</tr>)}
         </thead><tbody>
           {table.getRowModel().rows.map((row) => <tr key={row.id}>{row.getVisibleCells().map((cell) => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>)}
         </tbody></table></div>
