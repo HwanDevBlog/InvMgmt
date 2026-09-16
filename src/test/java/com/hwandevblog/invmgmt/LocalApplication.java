@@ -1,8 +1,11 @@
 package com.hwandevblog.invmgmt;
 
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * 컨테이너 없이 로컬에서 애플리케이션을 실행하기 위한 진입점이다.
@@ -23,6 +26,9 @@ public final class LocalApplication {
         System.setProperty("spring.datasource.url", postgres.getJdbcUrl("postgres", "postgres"));
         System.setProperty("spring.datasource.username", "postgres");
         System.setProperty("spring.datasource.password", "postgres");
-        InvMgmtApplication.main(args);
+        ConfigurableApplicationContext context = SpringApplication.run(InvMgmtApplication.class, args);
+        if (Arrays.asList(args).contains("--invmgmt.demo-data.enabled=true")) {
+            context.getBean(DemoDataLoader.class).load();
+        }
     }
 }
