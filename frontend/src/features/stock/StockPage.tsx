@@ -9,6 +9,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { fetchStocks } from './api';
+import { StockReconciliationPanel } from './StockReconciliationPanel';
 import type { Stock } from './types';
 
 const quantityFormatter = new Intl.NumberFormat('ko-KR');
@@ -114,6 +115,8 @@ export function StockPage() {
           </div>
         </div>
       </div>
+
+      <StockReconciliationPanel />
 
       {stocks.length > 0 ? (
         <div className="filter-toolbar">

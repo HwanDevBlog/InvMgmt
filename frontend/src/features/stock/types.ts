@@ -5,3 +5,13 @@ export type Stock = {
   quantity: number;
   version: number;
 };
+
+export type StockReconciliation = {
+  productId: number;
+  sku: string;
+  productName: string;
+  currentQuantity: number;
+  ledgerQuantity: number;
+  difference: number;
+  consistent: boolean;
+};

@@ -74,6 +74,24 @@ h1 { margin-bottom: 12px; font-size: clamp(34px, 5vw, 54px); line-height: 1.1; l
 .summary-list span, .summary-list strong { display: block; }
 .summary-list span { margin-bottom: 5px; color: #748078; font-size: 11px; }
 .summary-list strong { color: #1b3525; font-size: 22px; }
+.reconciliation-panel { padding: 20px 30px; border-bottom: 1px solid #e2e8e3; background: #fbfcfa; }
+.reconciliation-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.reconciliation-heading .eyebrow { margin-bottom: 5px; }
+.reconciliation-heading h3 { margin: 0 0 4px; font-size: 16px; }
+.reconciliation-heading p:last-child { margin: 0; color: #6c786f; font-size: 12px; }
+.reconciliation-button {
+  flex: 0 0 auto; padding: 9px 14px; color: #244f35; background: #fff;
+  border: 1px solid #9bb9a2; border-radius: 7px; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 700;
+}
+.reconciliation-button:hover { background: #edf5ed; }
+.reconciliation-button:disabled { opacity: .65; cursor: wait; }
+.reconciliation-button:focus-visible { outline: 2px solid #356347; outline-offset: 2px; }
+.reconciliation-message { margin: 14px 0 0; font-size: 12px; }
+.reconciliation-ok { color: #28613a; }
+.reconciliation-error { color: #9a472f; }
+.reconciliation-result .table-scroll { margin-top: 14px; border: 1px solid #e2e8e3; border-radius: 7px; }
+.reconciliation-difference { color: #9a472f; font-weight: 700; }
 .filter-toolbar {
   display: flex; flex-wrap: wrap; align-items: end; gap: 14px;
   padding: 18px 30px; border-bottom: 1px solid #e2e8e3;
@@ -190,6 +208,7 @@ footer {
   .data-toolbar, footer { align-items: flex-start; flex-direction: column; }
   .summary-list { width: 100%; }
   .summary-list div { text-align: left; }
+  .reconciliation-heading { align-items: flex-start; flex-direction: column; }
   .filter-toolbar label, .filter-toolbar input, .filter-toolbar select { width: 100%; }
   .filter-count { margin-left: 0; }
 }
