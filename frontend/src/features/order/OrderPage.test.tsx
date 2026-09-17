@@ -52,4 +52,66 @@ describe('OrderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '주문 일시' }));
     expect(within(screen.getAllByRole('row')[1]).getByText('ORD-001')).toBeInTheDocument();
   });
+
+  it('생성 주문을 예약하고 목록을 새로 불러온다', async () => {
+    let status = 'CREATED';
+    const order = () => ({
+      id: 1, orderNumber: 'ORD-001', status,
+      lines: [{ id: 10, productId: 1, sku: 'SKU-001', quantity: 2, returnedQuantity: 0 }],
+      createdAt: '2026-08-28T01:00:00Z', updatedAt: '2026-08-28T01:00:00Z',
+    });
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url === '/api/orders') return { ok: true, json: async () => [order()] } as Response;
+      if (url === '/api/orders/1/reserve') {
+        status = 'RESERVED';
+        return { ok: true, json: async () => order() } as Response;
+      }
+      if (url === '/api/orders/1/confirm') {
+        status = 'CONFIRMED';
+        return { ok: true, json: async () => order() } as Response;
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithQueryClient(<OrderPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ORD-001 재고 예약' }));
+    expect(await screen.findByRole('button', { name: 'ORD-001 주문 확정' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/orders/1/reserve', expect.objectContaining({
+      method: 'POST', headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+    }));
+    fireEvent.click(screen.getByRole('button', { name: 'ORD-001 주문 확정' }));
+    expect(await screen.findByText('ORD-001: 주문 확정 완료')).toBeInTheDocument();
+    expect(within(screen.getByRole('table')).getByText('확정')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/orders')).toHaveLength(3);
+  });
+
+  it('요청 실패 후 재시도할 때 같은 멱등키를 사용한다', async () => {
+    const order = {
+      id: 1, orderNumber: 'ORD-001', status: 'CREATED',
+      lines: [{ id: 10, productId: 1, sku: 'SKU-001', quantity: 2, returnedQuantity: 0 }],
+      createdAt: '2026-08-28T01:00:00Z', updatedAt: '2026-08-28T01:00:00Z',
+    };
+    let attempts = 0;
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url === '/api/orders') return { ok: true, json: async () => [order] } as Response;
+      if (url === '/api/orders/1/reserve') {
+        attempts += 1;
+        return attempts === 1
+          ? { ok: false, status: 500 } as Response
+          : { ok: true, json: async () => ({ ...order, status: 'RESERVED' }) } as Response;
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithQueryClient(<OrderPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ORD-001 재고 예약' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('처리에 실패했습니다');
+    fireEvent.click(screen.getByRole('button', { name: 'ORD-001 재고 예약' }));
+    expect(await screen.findByText('ORD-001: 재고 예약 완료')).toBeInTheDocument();
+    const postCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/orders/1/reserve');
+    expect(postCalls).toHaveLength(2);
+    expect((postCalls[0][1] as RequestInit).headers).toEqual((postCalls[1][1] as RequestInit).headers);
+  });
 });

@@ -153,6 +153,16 @@ tbody tr:hover { background: #fafcf9; }
 .status-confirmed { color: #285b38; background: #e2f1e4; }
 .status-canceled, .status-expired { color: #8b4936; background: #f7e4df; }
 .status-returned { color: #45528a; background: #e8eafa; }
+.order-action-button {
+  padding: 7px 10px; color: #244f35; background: #edf5ed;
+  border: 1px solid #b7d1bc; border-radius: 6px; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 700;
+}
+.order-action-button:hover { background: #dff0e1; }
+.order-action-button:disabled { opacity: .6; cursor: wait; }
+.order-action-button:focus-visible { outline: 2px solid #356347; outline-offset: 2px; }
+.order-action-message { margin: 0; padding: 12px 30px; color: #28613a; background: #edf7ed; font-size: 13px; }
+.order-action-error { color: #9a472f; background: #fff3ef; }
 .expand-button {
   display: grid; width: 28px; height: 28px; place-items: center; color: #31553d;
   background: #f2f6f2; border: 1px solid #d6e0d8; border-radius: 6px;

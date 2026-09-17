@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createColumnHelper,
   flexRender,
@@ -10,7 +10,8 @@ import {
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table';
-import { fetchOrders } from './api';
+import { ApiError } from '../../api/http';
+import { executeOrderAction, fetchOrders, type OrderAction } from './api';
 import type { Order, OrderStatus } from './types';
 
 const numberFormatter = new Intl.NumberFormat('ko-KR');
@@ -20,6 +21,22 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
 const statusLabels: Record<OrderStatus, string> = {
   CREATED: '생성', RESERVED: '재고 예약', CONFIRMED: '확정',
   CANCELED: '취소', RETURNED: '반품 완료', EXPIRED: '만료',
+};
+const actionLabels: Record<OrderAction, string> = {
+  reserve: '재고 예약', confirm: '주문 확정',
+};
+
+function nextAction(status: OrderStatus): OrderAction | null {
+  if (status === 'CREATED') return 'reserve';
+  if (status === 'RESERVED') return 'confirm';
+  return null;
+}
+
+type OrderActionRequest = {
+  orderId: number;
+  orderNumber: string;
+  action: OrderAction;
+  idempotencyKey: string;
 };
 
 function sumQuantity(order: Order) {
@@ -75,9 +92,51 @@ const columns = [
 ];
 
 export function OrderPage() {
+  const queryClient = useQueryClient();
+  const retryKeys = useRef(new Map<string, string>());
   const [search, setSearch] = useState('');
   const [orderStatus, setOrderStatus] = useState('all');
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const actionMutation = useMutation({
+    mutationFn: ({ orderId, action, idempotencyKey }: OrderActionRequest) =>
+      executeOrderAction(orderId, action, idempotencyKey),
+    onSuccess: async (_order, request) => {
+      retryKeys.current.delete(`${request.orderId}:${request.action}`);
+      setActionError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['stocks'] }),
+        queryClient.invalidateQueries({ queryKey: ['stock-ledgers'] }),
+        queryClient.invalidateQueries({ queryKey: ['stock-reconciliations'] }),
+      ]);
+      setActionMessage(`${request.orderNumber}: ${actionLabels[request.action]} 완료`);
+    },
+    onError: (error, request) => {
+      setActionMessage(null);
+      if (error instanceof ApiError && error.status === 409) {
+        retryKeys.current.delete(`${request.orderId}:${request.action}`);
+        void queryClient.invalidateQueries({ queryKey: ['orders'] });
+        setActionError(`${request.orderNumber}: 현재 주문 상태에서 처리할 수 없습니다. 목록을 확인해 주세요.`);
+      } else {
+        setActionError(`${request.orderNumber}: 처리에 실패했습니다. 다시 시도해 주세요.`);
+      }
+    },
+  });
+
+  function handleAction(order: Order, action: OrderAction) {
+    if (actionMutation.isPending) return;
+    setActionMessage(null);
+    setActionError(null);
+    const keyId = `${order.id}:${action}`;
+    let idempotencyKey = retryKeys.current.get(keyId);
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      retryKeys.current.set(keyId, idempotencyKey);
+    }
+    actionMutation.mutate({ orderId: order.id, orderNumber: order.orderNumber, action, idempotencyKey });
+  }
   const orderQuery = useQuery({
     queryKey: ['orders'],
     queryFn: ({ signal }) => fetchOrders(signal),
@@ -134,6 +193,8 @@ export function OrderPage() {
           <span className="filter-count" role="status">조회 결과 {filteredOrders.length}건</span>
         </div>
       ) : null}
+      {actionMessage ? <p className="order-action-message" role="status">{actionMessage}</p> : null}
+      {actionError ? <p className="order-action-message order-action-error" role="alert">{actionError}</p> : null}
       {orders.length === 0 ? (
         <div className="empty-state"><span className="state-code">NO DATA</span><h3>등록된 주문이 없습니다</h3><p>주문이 생성되면 처리 상태와 상품 내역이 표시됩니다.</p></div>
       ) : filteredOrders.length === 0 ? (
@@ -149,10 +210,11 @@ export function OrderPage() {
                 </button>
               ) : flexRender(header.column.columnDef.header, header.getContext())}
             </th>
-          ))}</tr>)}
+          ))}<th scope="col">처리</th></tr>)}
         </thead><tbody>
           {table.getRowModel().rows.map((row) => (
-            <OrderRow key={row.id} row={row} visibleColumnCount={row.getVisibleCells().length} />
+            <OrderRow key={row.id} row={row} visibleColumnCount={row.getVisibleCells().length + 1}
+              isProcessing={actionMutation.isPending} onAction={handleAction} />
           ))}
         </tbody></table></div>
       )}
@@ -163,12 +225,23 @@ export function OrderPage() {
 type OrderRowProps = {
   row: Row<Order>;
   visibleColumnCount: number;
+  isProcessing: boolean;
+  onAction: (order: Order, action: OrderAction) => void;
 };
 
-function OrderRow({ row, visibleColumnCount }: OrderRowProps) {
+function OrderRow({ row, visibleColumnCount, isProcessing, onAction }: OrderRowProps) {
+  const action = nextAction(row.original.status);
   return (
     <>
-      <tr>{row.getVisibleCells().map((cell) => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>
+      <tr>{row.getVisibleCells().map((cell) => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
+        <td>{action ? (
+          <button type="button" className="order-action-button" disabled={isProcessing}
+            aria-label={`${row.original.orderNumber} ${actionLabels[action]}`}
+            onClick={() => onAction(row.original, action)}>
+            {actionLabels[action]}
+          </button>
+        ) : '-'}</td>
+      </tr>
       {row.getIsExpanded() ? (
         <tr className="order-detail-row"><td colSpan={visibleColumnCount}>
           <div className="order-lines" aria-label={`${row.original.orderNumber} 상품 내역`}>
