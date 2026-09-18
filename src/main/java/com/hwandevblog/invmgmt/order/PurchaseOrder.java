@@ -87,6 +87,9 @@ public class PurchaseOrder {
         if (status != OrderStatus.CONFIRMED) {
             throw new BusinessConflictException("Only confirmed orders can be canceled");
         }
+        if (lines.stream().anyMatch(line -> line.getReturnedQuantity() > 0)) {
+            throw new BusinessConflictException("Partially returned orders cannot be canceled");
+        }
         this.status = OrderStatus.CANCELED;
         this.updatedAt = Instant.now();
     }

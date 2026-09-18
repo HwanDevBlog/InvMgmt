@@ -320,6 +320,33 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void rejectsCancellationAfterPartialReturnWithoutRestoringInventoryAgain() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-CANCEL-PARTIAL", "Partially Returned Product", 10));
+        OrderResponse order = confirmedOrder(
+                "ORDER-CANCEL-PARTIAL-001", product.id(), 5);
+        long orderLineId = order.lines().getFirst().id();
+        performReturn(order.id(), orderLineId, 2, "cancel-partial-return-001")
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/orders/{orderId}/cancel", order.id())
+                        .header("Idempotency-Key", "cancel-partial-001"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Partially returned orders cannot be canceled"));
+
+        Integer cancellationLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'CANCEL'",
+                Integer.class,
+                product.id());
+
+        assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(orderService.get(order.id()).lines().getFirst().returnedQuantity()).isEqualTo(2);
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(7);
+        assertThat(cancellationLedgerCount).isZero();
+    }
+
+    @Test
     void replaysCompletedCancellationForSameIdempotencyKey() throws Exception {
         ProductResponse product = productService.create(
                 new CreateProductRequest("SKU-CANCEL-IDEMPOTENT", "Cancel Idempotent Product", 10));

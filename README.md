@@ -45,12 +45,12 @@ stateDiagram-v2
     [*] --> CREATED
     CREATED --> RESERVED: 재고 예약
     RESERVED --> CONFIRMED: 주문 확정
-    CONFIRMED --> CANCELED: 주문 취소
+    CONFIRMED --> CANCELED: 반품 전 주문 취소
     CONFIRMED --> CONFIRMED: 부분 반품
     CONFIRMED --> RETURNED: 전량 반품
 ```
 
-허용되지 않은 상태에서 명령을 실행하면 비즈니스 충돌로 처리합니다. 부분 반품 중에는 `CONFIRMED` 상태를 유지하고 모든 수량이 반품된 시점에 `RETURNED`로 전환합니다.
+허용되지 않은 상태에서 명령을 실행하면 비즈니스 충돌로 처리합니다. 부분 반품 중에는 `CONFIRMED` 상태를 유지하고 모든 수량이 반품된 시점에 `RETURNED`로 전환합니다. 이미 일부라도 반품된 주문은 취소할 수 없어 재고가 중복 복원되지 않습니다.
 
 ### 중복 요청과 동시성
 

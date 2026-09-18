@@ -11,7 +11,8 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ApiError } from '../../api/http';
-import { executeOrderAction, fetchOrders, type OrderAction } from './api';
+import { executeOrderAction, fetchOrders, returnOrderItems, type OrderAction, type ReturnOrderLine } from './api';
+import { OrderReturnForm } from './OrderReturnForm';
 import type { Order, OrderStatus } from './types';
 
 const numberFormatter = new Intl.NumberFormat('ko-KR');
@@ -23,12 +24,13 @@ const statusLabels: Record<OrderStatus, string> = {
   CANCELED: '취소', RETURNED: '반품 완료', EXPIRED: '만료',
 };
 const actionLabels: Record<OrderAction, string> = {
-  reserve: '재고 예약', confirm: '주문 확정',
+  reserve: '재고 예약', confirm: '주문 확정', cancel: '주문 취소',
 };
 
-function nextAction(status: OrderStatus): OrderAction | null {
-  if (status === 'CREATED') return 'reserve';
-  if (status === 'RESERVED') return 'confirm';
+function nextAction(order: Order): OrderAction | null {
+  if (order.status === 'CREATED') return 'reserve';
+  if (order.status === 'RESERVED') return 'confirm';
+  if (order.status === 'CONFIRMED' && order.lines.every((line) => line.returnedQuantity === 0)) return 'cancel';
   return null;
 }
 
@@ -36,6 +38,14 @@ type OrderActionRequest = {
   orderId: number;
   orderNumber: string;
   action: OrderAction;
+  idempotencyKey: string;
+};
+
+type OrderReturnRequest = {
+  orderId: number;
+  orderNumber: string;
+  lines: ReturnOrderLine[];
+  keyId: string;
   idempotencyKey: string;
 };
 
@@ -99,18 +109,24 @@ export function OrderPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [returnOrderId, setReturnOrderId] = useState<number | null>(null);
+
+  function invalidateOrderViews() {
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['orders'] }),
+      queryClient.invalidateQueries({ queryKey: ['stocks'] }),
+      queryClient.invalidateQueries({ queryKey: ['stock-ledgers'] }),
+      queryClient.invalidateQueries({ queryKey: ['stock-reconciliations'] }),
+    ]);
+  }
+
   const actionMutation = useMutation({
     mutationFn: ({ orderId, action, idempotencyKey }: OrderActionRequest) =>
       executeOrderAction(orderId, action, idempotencyKey),
     onSuccess: async (_order, request) => {
       retryKeys.current.delete(`${request.orderId}:${request.action}`);
       setActionError(null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['orders'] }),
-        queryClient.invalidateQueries({ queryKey: ['stocks'] }),
-        queryClient.invalidateQueries({ queryKey: ['stock-ledgers'] }),
-        queryClient.invalidateQueries({ queryKey: ['stock-reconciliations'] }),
-      ]);
+      await invalidateOrderViews();
       setActionMessage(`${request.orderNumber}: ${actionLabels[request.action]} 완료`);
     },
     onError: (error, request) => {
@@ -125,8 +141,30 @@ export function OrderPage() {
     },
   });
 
+  const returnMutation = useMutation({
+    mutationFn: ({ orderId, lines, idempotencyKey }: OrderReturnRequest) =>
+      returnOrderItems(orderId, lines, idempotencyKey),
+    onSuccess: async (_order, request) => {
+      retryKeys.current.delete(request.keyId);
+      setActionError(null);
+      await invalidateOrderViews();
+      setReturnOrderId(null);
+      setActionMessage(`${request.orderNumber}: 반품 처리 완료`);
+    },
+    onError: (error, request) => {
+      setActionMessage(null);
+      if (error instanceof ApiError && error.status === 409) {
+        retryKeys.current.delete(request.keyId);
+        void queryClient.invalidateQueries({ queryKey: ['orders'] });
+        setActionError(`${request.orderNumber}: 상태 또는 반품 가능 수량이 변경되었습니다. 주문을 다시 확인해 주세요.`);
+      } else {
+        setActionError(`${request.orderNumber}: 반품 처리에 실패했습니다. 다시 시도해 주세요.`);
+      }
+    },
+  });
+
   function handleAction(order: Order, action: OrderAction) {
-    if (actionMutation.isPending) return;
+    if (actionMutation.isPending || returnMutation.isPending) return;
     setActionMessage(null);
     setActionError(null);
     const keyId = `${order.id}:${action}`;
@@ -136,6 +174,21 @@ export function OrderPage() {
       retryKeys.current.set(keyId, idempotencyKey);
     }
     actionMutation.mutate({ orderId: order.id, orderNumber: order.orderNumber, action, idempotencyKey });
+  }
+
+  function handleReturn(order: Order, lines: ReturnOrderLine[]) {
+    if (actionMutation.isPending || returnMutation.isPending) return;
+    setActionMessage(null);
+    setActionError(null);
+    const identity = [...lines].sort((left, right) => left.orderLineId - right.orderLineId)
+      .map((line) => `${line.orderLineId}:${line.quantity}`).join(',');
+    const keyId = `${order.id}:return:${identity}`;
+    let idempotencyKey = retryKeys.current.get(keyId);
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      retryKeys.current.set(keyId, idempotencyKey);
+    }
+    returnMutation.mutate({ orderId: order.id, orderNumber: order.orderNumber, lines, keyId, idempotencyKey });
   }
   const orderQuery = useQuery({
     queryKey: ['orders'],
@@ -214,7 +267,12 @@ export function OrderPage() {
         </thead><tbody>
           {table.getRowModel().rows.map((row) => (
             <OrderRow key={row.id} row={row} visibleColumnCount={row.getVisibleCells().length + 1}
-              isProcessing={actionMutation.isPending} onAction={handleAction} />
+              isProcessing={actionMutation.isPending || returnMutation.isPending}
+              isReturnOpen={returnOrderId === row.original.id}
+              onAction={handleAction}
+              onOpenReturn={(order) => { setActionError(null); setActionMessage(null); setReturnOrderId(order.id); }}
+              onSubmitReturn={handleReturn}
+              onCloseReturn={() => setReturnOrderId(null)} />
           ))}
         </tbody></table></div>
       )}
@@ -226,21 +284,42 @@ type OrderRowProps = {
   row: Row<Order>;
   visibleColumnCount: number;
   isProcessing: boolean;
+  isReturnOpen: boolean;
   onAction: (order: Order, action: OrderAction) => void;
+  onOpenReturn: (order: Order) => void;
+  onSubmitReturn: (order: Order, lines: ReturnOrderLine[]) => void;
+  onCloseReturn: () => void;
 };
 
-function OrderRow({ row, visibleColumnCount, isProcessing, onAction }: OrderRowProps) {
-  const action = nextAction(row.original.status);
+function OrderRow({ row, visibleColumnCount, isProcessing, isReturnOpen, onAction,
+  onOpenReturn, onSubmitReturn, onCloseReturn }: OrderRowProps) {
+  const action = nextAction(row.original);
+  const canReturn = row.original.status === 'CONFIRMED'
+    && row.original.lines.some((line) => line.returnedQuantity < line.quantity);
   return (
     <>
       <tr>{row.getVisibleCells().map((cell) => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
-        <td>{action ? (
-          <button type="button" className="order-action-button" disabled={isProcessing}
-            aria-label={`${row.original.orderNumber} ${actionLabels[action]}`}
-            onClick={() => onAction(row.original, action)}>
-            {actionLabels[action]}
-          </button>
-        ) : '-'}</td>
+        <td><div className="order-actions">
+          {action ? (
+            <button type="button" className="order-action-button" disabled={isProcessing}
+              aria-label={`${row.original.orderNumber} ${actionLabels[action]}`}
+              onClick={() => {
+                if (action !== 'cancel' || window.confirm(`${row.original.orderNumber} 주문을 취소하고 재고를 복원할까요?`)) {
+                  onAction(row.original, action);
+                }
+              }}>
+              {actionLabels[action]}
+            </button>
+          ) : null}
+          {canReturn ? (
+            <button type="button" className="order-action-button" disabled={isProcessing}
+              aria-label={`${row.original.orderNumber} 반품 처리`}
+              onClick={() => { row.toggleExpanded(true); onOpenReturn(row.original); }}>
+              반품 처리
+            </button>
+          ) : null}
+          {!action && !canReturn ? '-' : null}
+        </div></td>
       </tr>
       {row.getIsExpanded() ? (
         <tr className="order-detail-row"><td colSpan={visibleColumnCount}>
@@ -249,6 +328,10 @@ function OrderRow({ row, visibleColumnCount, isProcessing, onAction }: OrderRowP
             <table><thead><tr><th scope="col">SKU</th><th scope="col">주문 수량</th><th scope="col">반품 수량</th></tr></thead>
               <tbody>{row.original.lines.map((line) => <tr key={line.id}><td><span className="sku-cell">{line.sku}</span></td><td>{numberFormatter.format(line.quantity)}</td><td>{numberFormatter.format(line.returnedQuantity)}</td></tr>)}</tbody>
             </table>
+            {isReturnOpen ? (
+              <OrderReturnForm order={row.original} isProcessing={isProcessing}
+                onSubmit={(lines) => onSubmitReturn(row.original, lines)} onClose={onCloseReturn} />
+            ) : null}
           </div>
         </td></tr>
       ) : null}

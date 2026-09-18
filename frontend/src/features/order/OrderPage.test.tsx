@@ -24,6 +24,7 @@ describe('OrderPage', () => {
     expect(screen.getByLabelText('ORD-20260828-001 상품 내역')).toBeInTheDocument();
     expect(screen.getByText('SKU-001')).toBeInTheDocument();
     expect(screen.getByText('SKU-002')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ORD-20260828-001 주문 취소' })).not.toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith('/api/orders', expect.objectContaining({ headers: { Accept: 'application/json' } }));
   });
 
@@ -86,6 +87,38 @@ describe('OrderPage', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/orders')).toHaveLength(3);
   });
 
+  it('반품하지 않은 확정 주문만 확인 후 취소한다', async () => {
+    let status = 'CONFIRMED';
+    const order = () => ({
+      id: 1, orderNumber: 'ORD-001', status,
+      lines: [{ id: 10, productId: 1, sku: 'SKU-001', quantity: 2, returnedQuantity: 0 }],
+      createdAt: '2026-08-28T01:00:00Z', updatedAt: '2026-08-28T01:00:00Z',
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/orders') return { ok: true, json: async () => [order()] } as Response;
+      if (url === '/api/orders/1/cancel') {
+        status = 'CANCELED';
+        return { ok: true, json: async () => order() } as Response;
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const confirmMock = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('confirm', confirmMock);
+    renderWithQueryClient(<OrderPage />);
+
+    const cancelButton = await screen.findByRole('button', { name: 'ORD-001 주문 취소' });
+    fireEvent.click(cancelButton);
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/orders/1/cancel')).toHaveLength(0);
+    fireEvent.click(cancelButton);
+    expect(await screen.findByText('ORD-001: 주문 취소 완료')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ORD-001 주문 취소' })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/orders/1/cancel', expect.objectContaining({
+      method: 'POST', headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+    }));
+    expect(confirmMock).toHaveBeenCalledTimes(2);
+  });
+
   it('요청 실패 후 재시도할 때 같은 멱등키를 사용한다', async () => {
     const order = {
       id: 1, orderNumber: 'ORD-001', status: 'CREATED',
@@ -111,6 +144,66 @@ describe('OrderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ORD-001 재고 예약' }));
     expect(await screen.findByText('ORD-001: 재고 예약 완료')).toBeInTheDocument();
     const postCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/orders/1/reserve');
+    expect(postCalls).toHaveLength(2);
+    expect((postCalls[0][1] as RequestInit).headers).toEqual((postCalls[1][1] as RequestInit).headers);
+  });
+
+  it('확정 주문의 일부 반품 수량을 전송하고 주문 목록을 갱신한다', async () => {
+    let returnedQuantity = 0;
+    const order = () => ({
+      id: 1, orderNumber: 'ORD-001', status: 'CONFIRMED',
+      lines: [{ id: 10, productId: 1, sku: 'SKU-001', quantity: 3, returnedQuantity }],
+      createdAt: '2026-08-28T01:00:00Z', updatedAt: '2026-08-28T01:00:00Z',
+    });
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/orders') return { ok: true, json: async () => [order()] } as Response;
+      if (url === '/api/orders/1/returns') {
+        returnedQuantity = 1;
+        return { ok: true, json: async () => order() } as Response;
+      }
+      throw new Error(`Unexpected URL: ${url} ${init?.method}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithQueryClient(<OrderPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ORD-001 반품 처리' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'SKU-001 반품 수량' }), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: '반품 적용' }));
+    expect(await screen.findByText('ORD-001: 반품 처리 완료')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ORD-001 반품 처리' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/orders/1/returns', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ lines: [{ orderLineId: 10, quantity: 1 }] }),
+      headers: expect.objectContaining({ 'Content-Type': 'application/json', 'Idempotency-Key': expect.any(String) }),
+    }));
+  });
+
+  it('반품 요청 실패 후 같은 수량으로 재시도하면 멱등키를 재사용한다', async () => {
+    const order = {
+      id: 1, orderNumber: 'ORD-001', status: 'CONFIRMED',
+      lines: [{ id: 10, productId: 1, sku: 'SKU-001', quantity: 3, returnedQuantity: 0 }],
+      createdAt: '2026-08-28T01:00:00Z', updatedAt: '2026-08-28T01:00:00Z',
+    };
+    let attempts = 0;
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url === '/api/orders') return { ok: true, json: async () => [order] } as Response;
+      if (url === '/api/orders/1/returns') {
+        attempts += 1;
+        return attempts === 1
+          ? { ok: false, status: 500 } as Response
+          : { ok: true, json: async () => ({ ...order, status: 'RETURNED' }) } as Response;
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithQueryClient(<OrderPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ORD-001 반품 처리' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'SKU-001 반품 수량' }), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: '반품 적용' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('반품 처리에 실패했습니다');
+    fireEvent.click(screen.getByRole('button', { name: '반품 적용' }));
+    expect(await screen.findByText('ORD-001: 반품 처리 완료')).toBeInTheDocument();
+    const postCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/orders/1/returns');
     expect(postCalls).toHaveLength(2);
     expect((postCalls[0][1] as RequestInit).headers).toEqual((postCalls[1][1] as RequestInit).headers);
   });
