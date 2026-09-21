@@ -34,6 +34,42 @@ describe('OrderPage', () => {
     expect(await screen.findByText('등록된 주문이 없습니다')).toBeInTheDocument();
   });
 
+  it('새 주문을 생성하고 빈 목록을 갱신한다', async () => {
+    let orders: object[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/orders' && !init?.method) return { ok: true, json: async () => orders } as Response;
+      if (url === '/api/products') return { ok: true, json: async () => [
+        { id: 1, sku: 'SKU-001', name: '키보드', active: true, stockQuantity: 10 },
+        { id: 2, sku: 'SKU-002', name: '비활성', active: false, stockQuantity: 5 },
+      ] } as Response;
+      if (url === '/api/orders' && init?.method === 'POST') {
+        orders = [{ id: 1, orderNumber: 'ORD-NEW', status: 'CREATED',
+          lines: [{ id: 10, productId: 1, sku: 'SKU-001', quantity: 2, returnedQuantity: 0 }],
+          createdAt: '2026-08-28T01:00:00Z', updatedAt: '2026-08-28T01:00:00Z' }];
+        return { ok: true, json: async () => orders[0] } as Response;
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithQueryClient(<OrderPage />);
+
+    expect(await screen.findByText('등록된 주문이 없습니다')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '새 주문' }).closest('.filter-toolbar')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '새 주문' }));
+    expect(await screen.findByRole('combobox', { name: '상품 1' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /SKU-002/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: '주문 번호' }), { target: { value: 'ORD-NEW' } });
+    fireEvent.change(screen.getByRole('combobox', { name: '상품 1' }), { target: { value: '1' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: '수량 1' }), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: '주문 생성' }));
+
+    expect(await screen.findByText('ORD-NEW: 주문 생성 완료')).toBeInTheDocument();
+    expect(screen.getByText('ORD-NEW')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/orders', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ orderNumber: 'ORD-NEW', lines: [{ productId: 1, quantity: 2 }] }),
+    }));
+  });
+
   it('상품 코드 검색·주문 상태 필터·주문 일시 정렬을 적용한다', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [
       { id: 2, orderNumber: 'ORD-002', status: 'CONFIRMED', lines: [{ id: 20, productId: 1, sku: 'SKU-002', quantity: 2, returnedQuantity: 0 }], createdAt: '2026-08-28T02:00:00Z', updatedAt: '2026-08-28T02:00:00Z' },

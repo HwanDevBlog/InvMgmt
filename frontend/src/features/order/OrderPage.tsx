@@ -11,7 +11,9 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ApiError } from '../../api/http';
-import { executeOrderAction, fetchOrders, returnOrderItems, type OrderAction, type ReturnOrderLine } from './api';
+import { createOrder, executeOrderAction, fetchOrderProducts, fetchOrders, returnOrderItems,
+  type CreateOrderInput, type OrderAction, type ReturnOrderLine } from './api';
+import { OrderCreateForm } from './OrderCreateForm';
 import { OrderReturnForm } from './OrderReturnForm';
 import type { Order, OrderStatus } from './types';
 
@@ -110,6 +112,7 @@ export function OrderPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [returnOrderId, setReturnOrderId] = useState<number | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   function invalidateOrderViews() {
     return Promise.all([
@@ -163,8 +166,34 @@ export function OrderPage() {
     },
   });
 
+  const createMutation = useMutation({
+    mutationFn: createOrder,
+    onSuccess: async (order) => {
+      setActionError(null);
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      setIsCreateOpen(false);
+      setActionMessage(`${order.orderNumber}: 주문 생성 완료`);
+    },
+    onError: (error, input) => {
+      setActionMessage(null);
+      if (error instanceof ApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: ['orders'] });
+        setActionError(`${input.orderNumber}: 이미 등록된 주문 번호입니다. 목록을 확인해 주세요.`);
+      } else {
+        setActionError(`${input.orderNumber}: 주문 생성에 실패했습니다. 목록에서 생성 여부를 확인해 주세요.`);
+      }
+    },
+  });
+
+  function handleCreate(input: CreateOrderInput) {
+    if (createMutation.isPending || actionMutation.isPending || returnMutation.isPending) return;
+    setActionMessage(null);
+    setActionError(null);
+    createMutation.mutate(input);
+  }
+
   function handleAction(order: Order, action: OrderAction) {
-    if (actionMutation.isPending || returnMutation.isPending) return;
+    if (createMutation.isPending || actionMutation.isPending || returnMutation.isPending) return;
     setActionMessage(null);
     setActionError(null);
     const keyId = `${order.id}:${action}`;
@@ -177,7 +206,7 @@ export function OrderPage() {
   }
 
   function handleReturn(order: Order, lines: ReturnOrderLine[]) {
-    if (actionMutation.isPending || returnMutation.isPending) return;
+    if (createMutation.isPending || actionMutation.isPending || returnMutation.isPending) return;
     setActionMessage(null);
     setActionError(null);
     const identity = [...lines].sort((left, right) => left.orderLineId - right.orderLineId)
@@ -194,6 +223,13 @@ export function OrderPage() {
     queryKey: ['orders'],
     queryFn: ({ signal }) => fetchOrders(signal),
   });
+  const productsQuery = useQuery({
+    queryKey: ['products'],
+    queryFn: ({ signal }) => fetchOrderProducts(signal),
+    enabled: isCreateOpen,
+  });
+  const activeProducts = productsQuery.data?.filter((product) => product.active) ?? [];
+  const isProcessing = createMutation.isPending || actionMutation.isPending || returnMutation.isPending;
   const orders = orderQuery.data ?? emptyOrders;
   const totalLineCount = orders.reduce((sum, order) => sum + order.lines.length, 0);
   const totalReturnedQuantity = orders.reduce((sum, order) => sum + sumReturnedQuantity(order), 0);
@@ -232,8 +268,8 @@ export function OrderPage() {
           <div><span>반품 수량</span><strong>{numberFormatter.format(totalReturnedQuantity)}</strong></div>
         </div>
       </div>
-      {orders.length > 0 ? (
-        <div className="filter-toolbar">
+      <div className="filter-toolbar">
+        {orders.length > 0 ? <>
           <label>주문 검색
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="주문 번호 또는 상품 코드" />
           </label>
@@ -243,9 +279,25 @@ export function OrderPage() {
               {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          <span className="filter-count" role="status">조회 결과 {filteredOrders.length}건</span>
+        </> : null}
+        <div className="order-list-actions">
+          {orders.length > 0 ? <span className="filter-count" role="status">조회 결과 {filteredOrders.length}건</span> : null}
+          <button type="button" className={isCreateOpen
+            ? 'order-action-button order-action-button-secondary order-create-toggle'
+            : 'primary-button order-create-toggle'} disabled={isProcessing}
+            aria-expanded={isCreateOpen} onClick={() => {
+              setActionError(null); setActionMessage(null); setIsCreateOpen((open) => !open);
+            }}>{isCreateOpen ? '주문 입력 닫기' : '새 주문'}</button>
         </div>
-      ) : null}
+      </div>
+      {isCreateOpen ? <div className="order-create-panel">
+        {productsQuery.isPending ? <p role="status">상품을 불러오는 중입니다.</p>
+          : productsQuery.isError ? <p role="alert">상품을 불러오지 못했습니다.
+            <button type="button" className="order-action-button" onClick={() => void productsQuery.refetch()}>다시 불러오기</button>
+          </p> : activeProducts.length === 0 ? <p>주문할 수 있는 상품이 없습니다.</p>
+            : <OrderCreateForm products={activeProducts} isProcessing={isProcessing}
+              onSubmit={handleCreate} onClose={() => setIsCreateOpen(false)} />}
+      </div> : null}
       {actionMessage ? <p className="order-action-message" role="status">{actionMessage}</p> : null}
       {actionError ? <p className="order-action-message order-action-error" role="alert">{actionError}</p> : null}
       {orders.length === 0 ? (
@@ -267,7 +319,7 @@ export function OrderPage() {
         </thead><tbody>
           {table.getRowModel().rows.map((row) => (
             <OrderRow key={row.id} row={row} visibleColumnCount={row.getVisibleCells().length + 1}
-              isProcessing={actionMutation.isPending || returnMutation.isPending}
+              isProcessing={isProcessing}
               isReturnOpen={returnOrderId === row.original.id}
               onAction={handleAction}
               onOpenReturn={(order) => { setActionError(null); setActionMessage(null); setReturnOrderId(order.id); }}
