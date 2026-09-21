@@ -21,6 +21,6 @@ class DatabaseIntegrationTest extends PostgresIntegrationTest {
                 "select count(*) from flyway_schema_history where success", Integer.class);
 
         assertThat(serverVersion).isBetween(160000, 169999);
-        assertThat(migrationCount).isEqualTo(1);
+        assertThat(migrationCount).isEqualTo(2);
     }
 }

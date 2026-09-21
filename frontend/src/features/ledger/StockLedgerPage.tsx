@@ -17,7 +17,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
 });
 const movementLabels: Record<StockMovementType, string> = {
   INITIAL: '초기 재고', RESERVE: '재고 예약', CANCEL: '예약 취소',
-  RETURN: '반품', ADJUSTMENT: '재고 조정',
+  EXPIRE: '예약 만료', RETURN: '반품', ADJUSTMENT: '재고 조정',
 };
 
 function formatDelta(value: number) {

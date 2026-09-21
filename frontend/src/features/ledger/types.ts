@@ -1,4 +1,4 @@
-export type StockMovementType = 'INITIAL' | 'RESERVE' | 'CANCEL' | 'RETURN' | 'ADJUSTMENT';
+export type StockMovementType = 'INITIAL' | 'RESERVE' | 'EXPIRE' | 'CANCEL' | 'RETURN' | 'ADJUSTMENT';
 
 export type StockLedger = {
   id: number;

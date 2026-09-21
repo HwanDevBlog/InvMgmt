@@ -48,6 +48,25 @@ class PurchaseOrderDomainTest {
     }
 
     @Test
+    void changesReservedOrderToExpired() {
+        PurchaseOrder order = PurchaseOrder.create("ORDER-EXPIRE-001");
+        order.reserve();
+
+        order.expire();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.EXPIRED);
+    }
+
+    @Test
+    void rejectsExpirationWhenOrderIsNotReserved() {
+        PurchaseOrder order = PurchaseOrder.create("ORDER-EXPIRE-002");
+
+        assertThatThrownBy(order::expire)
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessage("Only reserved orders can be expired");
+    }
+
+    @Test
     void changesConfirmedOrderToCanceled() {
         PurchaseOrder order = PurchaseOrder.create("ORDER-005");
         order.reserve();

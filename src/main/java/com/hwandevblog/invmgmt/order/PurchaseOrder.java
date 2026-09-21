@@ -83,6 +83,14 @@ public class PurchaseOrder {
         this.updatedAt = Instant.now();
     }
 
+    public void expire() {
+        if (status != OrderStatus.RESERVED) {
+            throw new BusinessConflictException("Only reserved orders can be expired");
+        }
+        this.status = OrderStatus.EXPIRED;
+        this.updatedAt = Instant.now();
+    }
+
     public void cancel() {
         if (status != OrderStatus.CONFIRMED) {
             throw new BusinessConflictException("Only confirmed orders can be canceled");

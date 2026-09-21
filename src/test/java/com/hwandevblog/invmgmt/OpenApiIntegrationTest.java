@@ -28,6 +28,7 @@ class OpenApiIntegrationTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/stocks']").exists())
                 .andExpect(jsonPath("$.paths['/api/stock-ledgers']").exists())
                 .andExpect(jsonPath("$.paths['/api/orders/{orderId}/reserve']").exists())
+                .andExpect(jsonPath("$.paths['/api/orders/{orderId}/expire']").exists())
                 .andExpect(jsonPath("$.paths['/api/orders/{orderId}/returns']").exists())
                 .andExpect(jsonPath("$.paths['/api/reconciliations/stocks']").exists());
     }

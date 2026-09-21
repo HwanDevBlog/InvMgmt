@@ -71,6 +71,17 @@ public class PurchaseOrderController {
                 () -> orderService.confirm(orderId));
     }
 
+    @PostMapping("/{orderId}/expire")
+    @Operation(summary = "주문 예약 만료 및 재고 복원")
+    OrderResponse expire(@PathVariable long orderId,
+                         @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return idempotencyService.execute(
+                idempotencyKey,
+                "EXPIRE_ORDER:" + orderId,
+                OrderResponse.class,
+                () -> orderService.expire(orderId));
+    }
+
     @PostMapping("/{orderId}/cancel")
     @Operation(summary = "주문 취소 및 재고 복원")
     OrderResponse cancel(@PathVariable long orderId,

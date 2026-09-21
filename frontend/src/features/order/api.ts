@@ -1,7 +1,7 @@
 import { ApiError, getJson } from '../../api/http';
 import type { Order } from './types';
 
-export type OrderAction = 'reserve' | 'confirm' | 'cancel';
+export type OrderAction = 'reserve' | 'confirm' | 'expire' | 'cancel';
 export type ReturnOrderLine = { orderLineId: number; quantity: number };
 export type OrderProduct = { id: number; sku: string; name: string; active: boolean; stockQuantity: number };
 export type CreateOrderInput = {

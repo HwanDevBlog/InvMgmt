@@ -99,6 +99,26 @@ public class PurchaseOrderService {
     }
 
     @Transactional
+    public OrderResponse expire(long orderId) {
+        PurchaseOrder order = findForUpdate(orderId);
+
+        order.expire();
+        order.getLines().forEach(line -> {
+            Stock stock = stockRepository.findById(line.getProduct().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Stock not found: " + line.getProduct().getId()));
+            stock.restore(line.getQuantity());
+            stockLedgerRepository.save(StockLedger.expire(
+                    line.getProduct(),
+                    line.getQuantity(),
+                    stock.getQuantity(),
+                    order.getId()));
+        });
+
+        return OrderResponse.from(order);
+    }
+
+    @Transactional
     public OrderResponse cancel(long orderId) {
         PurchaseOrder order = findForUpdate(orderId);
 

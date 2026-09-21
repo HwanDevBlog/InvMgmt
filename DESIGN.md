@@ -56,10 +56,10 @@ Zonky는 테스트 및 로컬 실행 전용 의존성으로 격리하며 배포�
 
 ```text
 CREATED → RESERVED → CONFIRMED → CANCELED 또는 RETURNED
-                  ↘ EXPIRED
+              ↘ EXPIRED
 ```
 
-정확한 `EXPIRED` 전이 출발 상태는 상태 머신 구현 전에 테스트 사례와 함께 확정한다.
+`EXPIRED`는 재고가 이미 차감된 `RESERVED` 상태에서만 전환한다. 만료 시 예약 수량을 현재고에 복원하고 `EXPIRE` 원장을 남긴다.
 
 ## 5. 마일스톤
 

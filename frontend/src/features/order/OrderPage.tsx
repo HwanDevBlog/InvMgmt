@@ -26,14 +26,14 @@ const statusLabels: Record<OrderStatus, string> = {
   CANCELED: '취소', RETURNED: '반품 완료', EXPIRED: '만료',
 };
 const actionLabels: Record<OrderAction, string> = {
-  reserve: '재고 예약', confirm: '주문 확정', cancel: '주문 취소',
+  reserve: '재고 예약', confirm: '주문 확정', expire: '예약 만료', cancel: '주문 취소',
 };
 
-function nextAction(order: Order): OrderAction | null {
-  if (order.status === 'CREATED') return 'reserve';
-  if (order.status === 'RESERVED') return 'confirm';
-  if (order.status === 'CONFIRMED' && order.lines.every((line) => line.returnedQuantity === 0)) return 'cancel';
-  return null;
+function availableActions(order: Order): OrderAction[] {
+  if (order.status === 'CREATED') return ['reserve'];
+  if (order.status === 'RESERVED') return ['confirm', 'expire'];
+  if (order.status === 'CONFIRMED' && order.lines.every((line) => line.returnedQuantity === 0)) return ['cancel'];
+  return [];
 }
 
 type OrderActionRequest = {
@@ -345,24 +345,29 @@ type OrderRowProps = {
 
 function OrderRow({ row, visibleColumnCount, isProcessing, isReturnOpen, onAction,
   onOpenReturn, onSubmitReturn, onCloseReturn }: OrderRowProps) {
-  const action = nextAction(row.original);
+  const actions = availableActions(row.original);
   const canReturn = row.original.status === 'CONFIRMED'
     && row.original.lines.some((line) => line.returnedQuantity < line.quantity);
   return (
     <>
       <tr>{row.getVisibleCells().map((cell) => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
         <td><div className="order-actions">
-          {action ? (
-            <button type="button" className="order-action-button" disabled={isProcessing}
+          {actions.map((action) => (
+            <button type="button" className={action === 'expire'
+              ? 'order-action-button order-action-button-secondary' : 'order-action-button'}
+              key={action} disabled={isProcessing}
               aria-label={`${row.original.orderNumber} ${actionLabels[action]}`}
               onClick={() => {
-                if (action !== 'cancel' || window.confirm(`${row.original.orderNumber} 주문을 취소하고 재고를 복원할까요?`)) {
+                const message = action === 'cancel'
+                  ? `${row.original.orderNumber} 주문을 취소하고 재고를 복원할까요?`
+                  : `${row.original.orderNumber} 예약을 만료하고 재고를 복원할까요?`;
+                if ((action !== 'cancel' && action !== 'expire') || window.confirm(message)) {
                   onAction(row.original, action);
                 }
               }}>
               {actionLabels[action]}
             </button>
-          ) : null}
+          ))}
           {canReturn ? (
             <button type="button" className="order-action-button" disabled={isProcessing}
               aria-label={`${row.original.orderNumber} 반품 처리`}
@@ -370,7 +375,7 @@ function OrderRow({ row, visibleColumnCount, isProcessing, isReturnOpen, onActio
               반품 처리
             </button>
           ) : null}
-          {!action && !canReturn ? '-' : null}
+          {actions.length === 0 && !canReturn ? '-' : null}
         </div></td>
       </tr>
       {row.getIsExpanded() ? (

@@ -155,6 +155,38 @@ describe('OrderPage', () => {
     expect(confirmMock).toHaveBeenCalledTimes(2);
   });
 
+  it('재고 예약 주문을 확인 후 만료하고 재고 관련 목록을 갱신한다', async () => {
+    let status = 'RESERVED';
+    const order = () => ({
+      id: 1, orderNumber: 'ORD-001', status,
+      lines: [{ id: 10, productId: 1, sku: 'SKU-001', quantity: 2, returnedQuantity: 0 }],
+      createdAt: '2026-08-28T01:00:00Z', updatedAt: '2026-08-28T01:00:00Z',
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/orders') return { ok: true, json: async () => [order()] } as Response;
+      if (url === '/api/orders/1/expire') {
+        status = 'EXPIRED';
+        return { ok: true, json: async () => order() } as Response;
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const confirmMock = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('confirm', confirmMock);
+    renderWithQueryClient(<OrderPage />);
+
+    expect(await screen.findByRole('button', { name: 'ORD-001 주문 확정' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ORD-001 예약 만료' }));
+
+    expect(confirmMock).toHaveBeenCalledWith('ORD-001 예약을 만료하고 재고를 복원할까요?');
+    expect(await screen.findByText('ORD-001: 예약 만료 완료')).toBeInTheDocument();
+    expect(within(screen.getByRole('table')).getByText('만료')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ORD-001 주문 확정' })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/orders/1/expire', expect.objectContaining({
+      method: 'POST', headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+    }));
+  });
+
   it('요청 실패 후 재시도할 때 같은 멱등키를 사용한다', async () => {
     const order = {
       id: 1, orderNumber: 'ORD-001', status: 'CREATED',

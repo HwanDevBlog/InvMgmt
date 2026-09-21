@@ -140,7 +140,7 @@ tbody tr:hover { background: #fafcf9; }
   border-radius: 6px; font-size: 11px; font-weight: 700;
 }
 .movement-reserve { color: #86472f; background: #f8e9df; }
-.movement-cancel, .movement-return { color: #28613a; background: #e5f2e4; }
+.movement-cancel, .movement-expire, .movement-return { color: #28613a; background: #e5f2e4; }
 .movement-adjustment { color: #55528a; background: #ecebfa; }
 .order-number-cell {
   color: #264d35; font-family: "Cascadia Code", Consolas, monospace;

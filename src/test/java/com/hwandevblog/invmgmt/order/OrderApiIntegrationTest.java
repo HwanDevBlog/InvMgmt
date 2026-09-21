@@ -272,6 +272,59 @@ class OrderApiIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void expiresReservedOrderOnceAndRestoresInventory() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-EXPIRE", "Expire Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-EXPIRE-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+        orderService.reserve(order.id());
+
+        mockMvc.perform(post("/api/orders/{orderId}/expire", order.id())
+                        .header("Idempotency-Key", "expire-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXPIRED"));
+
+        mockMvc.perform(post("/api/orders/{orderId}/expire", order.id())
+                        .header("Idempotency-Key", "expire-idempotent-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXPIRED"));
+
+        Integer expirationLedgerCount = jdbcTemplate.queryForObject(
+                "select count(*) from stock_ledger "
+                        + "where product_id = ? and movement_type = 'EXPIRE'",
+                Integer.class,
+                product.id());
+        Long expirationDelta = jdbcTemplate.queryForObject(
+                "select quantity_delta from stock_ledger "
+                        + "where product_id = ? and movement_type = 'EXPIRE'",
+                Long.class,
+                product.id());
+
+        assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.EXPIRED);
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
+        assertThat(expirationLedgerCount).isEqualTo(1);
+        assertThat(expirationDelta).isEqualTo(3);
+    }
+
+    @Test
+    void rejectsExpirationUnlessOrderIsReserved() throws Exception {
+        ProductResponse product = productService.create(
+                new CreateProductRequest("SKU-EXPIRE-STATE", "Expire State Product", 10));
+        OrderResponse order = orderService.create(new CreateOrderRequest(
+                "ORDER-EXPIRE-STATE-001",
+                List.of(new CreateOrderRequest.Line(product.id(), 3))));
+
+        mockMvc.perform(post("/api/orders/{orderId}/expire", order.id())
+                        .header("Idempotency-Key", "expire-invalid-state-001"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Only reserved orders can be expired"));
+
+        assertThat(orderService.get(order.id()).status()).isEqualTo(OrderStatus.CREATED);
+        assertThat(productService.get(product.id()).stockQuantity()).isEqualTo(10);
+    }
+
+    @Test
     void cancelsConfirmedOrderAndRestoresInventory() throws Exception {
         ProductResponse product = productService.create(
                 new CreateProductRequest("SKU-CANCEL", "Cancel Product", 10));

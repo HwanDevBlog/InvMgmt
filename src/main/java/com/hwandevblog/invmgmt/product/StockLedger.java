@@ -100,6 +100,19 @@ public class StockLedger {
                 Long.toString(orderId));
     }
 
+    public static StockLedger expire(Product product, long quantity, long balanceAfter, long orderId) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Expiration quantity must be positive");
+        }
+        return new StockLedger(
+                product,
+                StockMovementType.EXPIRE,
+                quantity,
+                balanceAfter,
+                "ORDER",
+                Long.toString(orderId));
+    }
+
     public static StockLedger returned(Product product, long quantity,
                                        long balanceAfter, long orderLineId) {
         if (quantity <= 0) {

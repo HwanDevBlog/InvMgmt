@@ -9,12 +9,14 @@ describe('StockLedgerPage', () => {
 
   it('재고 증감과 업무 참조를 표시한다', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [
+      { id: 3, productId: 1, sku: 'SKU-001', productName: '기계식 키보드', movementType: 'EXPIRE', quantityDelta: 3, balanceAfter: 25, referenceType: 'ORDER', referenceId: '101', createdAt: '2026-08-27T08:00:00Z' },
       { id: 2, productId: 1, sku: 'SKU-001', productName: '기계식 키보드', movementType: 'RESERVE', quantityDelta: -3, balanceAfter: 22, referenceType: 'ORDER', referenceId: '100', createdAt: '2026-08-27T07:00:00Z' },
       { id: 1, productId: 1, sku: 'SKU-001', productName: '기계식 키보드', movementType: 'INITIAL', quantityDelta: 25, balanceAfter: 25, referenceType: 'PRODUCT', referenceId: null, createdAt: '2026-08-27T06:00:00Z' },
     ] } as Response));
     renderWithQueryClient(<StockLedgerPage />);
     expect(await screen.findByText('ORDER · 100')).toBeInTheDocument();
     expect(within(screen.getByRole('table')).getByText('재고 예약')).toBeInTheDocument();
+    expect(within(screen.getByRole('table')).getByText('예약 만료')).toBeInTheDocument();
     expect(within(screen.getByRole('table')).getByText('초기 재고')).toBeInTheDocument();
     expect(screen.getByText('-3')).toBeInTheDocument();
     expect(screen.getByText('+25')).toBeInTheDocument();

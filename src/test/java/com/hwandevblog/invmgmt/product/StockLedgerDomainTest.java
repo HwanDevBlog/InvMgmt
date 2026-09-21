@@ -33,6 +33,19 @@ class StockLedgerDomainTest {
     }
 
     @Test
+    void createsExpirationLedgerWithPositiveDeltaAndOrderReference() {
+        Product product = Product.create("SKU-EXPIRE-LEDGER", "Expire Ledger Product");
+
+        StockLedger ledger = StockLedger.expire(product, 4, 12, 18L);
+
+        assertThat(ledger.getMovementType()).isEqualTo(StockMovementType.EXPIRE);
+        assertThat(ledger.getQuantityDelta()).isEqualTo(4);
+        assertThat(ledger.getBalanceAfter()).isEqualTo(12);
+        assertThat(ledger.getReferenceType()).isEqualTo("ORDER");
+        assertThat(ledger.getReferenceId()).isEqualTo("18");
+    }
+
+    @Test
     void createsReturnLedgerWithPositiveDeltaAndOrderLineReference() {
         Product product = Product.create("SKU-RETURN-LEDGER", "Return Ledger Product");
 
