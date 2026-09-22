@@ -82,7 +82,7 @@ stateDiagram-v2
 
 ## 실행 방법
 
-Java 21이 필요합니다. 별도의 PostgreSQL이나 컨테이너 없이 로컬 실행용 임베디드 PostgreSQL이 함께 시작됩니다.
+Java 21과 Node.js 24가 필요합니다. 별도의 PostgreSQL이나 컨테이너 없이 로컬 실행용 임베디드 PostgreSQL이 함께 시작됩니다.
 
 Windows에서 전체 테스트 실행:
 
@@ -114,7 +114,7 @@ Windows에서 전체 테스트 실행:
 
 ```powershell
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
