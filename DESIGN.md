@@ -85,3 +85,18 @@ CREATED → RESERVED → CONFIRMED → CANCELED 또는 RETURNED
 - 비밀값과 로컬 경로를 커밋하지 않는다.
 - 커밋 전 `git diff --staged`로 공개 내용을 검토한다.
 - 측정하지 않은 수치나 `완벽`, `무중단`, `버그 0건` 같은 표현을 사용하지 않는다.
+
+
+## 8. 로컬 DB 데이터 보존 적용
+
+- 로컬 실행은 `src/test/java/com/hwandevblog/invmgmt/LocalApplication.java`와 `LocalPostgres.java`에서 관리한다.
+- PostgreSQL 포트는 15432, DB와 접속 계정은 postgres, 웹 포트는 기존 18080을 유지한다.
+- 데이터는 프로젝트의 `.local/postgres-data`, 중복 실행 잠금은 `.local/database.lock`에 두고 `.local/` 전체를 Git에서 제외한다.
+- Gradle localRun·demoRun의 작업 디렉터리를 프로젝트 루트로 고정한다. DB 종료 시 데이터 삭제를 끄고 fsync를 켠다.
+- DemoDataLoader는 기존 상품이 있으면 생성 작업을 건너뛰며 최초 생성 전체를 하나의 트랜잭션으로 처리한다.
+- 스키마·마이그레이션 변경은 없다. 기존 임시 DB 데이터 자동 이전은 하지 않는다.
+- 전체 서버 테스트 64건 통과(실패·오류·건너뜀 0). LocalPostgresTest는 별도 임시 폴더에서 실제 DB 재시작 후 상품·재고·버전·Flyway 이력 유지, fsync=on, 동일 포트 재사용, 중복 실행 차단을 검증했다.
+- DemoDataLoaderIntegrationTest는 두 번 생성 호출 시 상품 4개·주문 6개·원장 12개 유지와 사용자 상품이 있을 때 시연 데이터 미생성을 검증했다.
+- 실제 demoRun 종료·재실행 후 상품 4개와 주문 6개의 상태·재고·버전 유지 및 시연 데이터 생성 건너뜀을 확인했다.
+- 테스트용 PostgresIntegrationTest는 기존 임시 DB 방식을 유지한다. 프론트엔드 변경은 없다.
+- 검증 후 InvMgmt를 18080/15432에서 실행해 두었다. 다음 확인은 DBeaver의 InvMgmt 로컬 연결에서 public 스키마 조회다.

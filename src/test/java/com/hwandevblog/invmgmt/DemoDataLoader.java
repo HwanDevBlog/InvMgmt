@@ -10,6 +10,7 @@ import com.hwandevblog.invmgmt.product.ProductService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -30,7 +31,13 @@ public class DemoDataLoader {
         this.orderService = orderService;
     }
 
+    @Transactional
     public void load() {
+        // 보존된 상품이 있으면 시연 데이터를 덮어쓰거나 중복 생성하지 않는다.
+        if (!productService.list().isEmpty()) {
+            log.info("Skipped local demo data: existing products are preserved");
+            return;
+        }
         ProductResponse keyboard = createProduct("DEMO-KEYBOARD", "기계식 키보드", 30);
         ProductResponse mouse = createProduct("DEMO-MOUSE", "무선 마우스", 20);
         createProduct("DEMO-MONITOR-ARM", "모니터 암", 0);

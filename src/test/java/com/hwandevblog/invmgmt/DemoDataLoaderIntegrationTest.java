@@ -34,7 +34,21 @@ class DemoDataLoaderIntegrationTest extends PostgresIntegrationTest {
     private StockReconciliationService reconciliationService;
 
     @Test
+    void preservesExistingUserProductsWithoutAddingDemoData() {
+        productService.create(new com.hwandevblog.invmgmt.product.CreateProductRequest("USER-001", "사용자 상품", 7));
+        demoDataLoader.load();
+        assertThat(productService.list()).hasSize(1);
+        assertThat(productService.listStocks()).singleElement().satisfies(stock -> {
+            assertThat(stock.sku()).isEqualTo("USER-001");
+            assertThat(stock.quantity()).isEqualTo(7);
+        });
+        assertThat(orderService.list()).isEmpty();
+    }
+
+    @Test
     void loadsConsistentProductsOrdersAndStockLedgersThroughDomainServices() {
+        demoDataLoader.load();
+        // 재실행해도 기존 주문 상태와 원장 수가 바뀌지 않아야 한다.
         demoDataLoader.load();
 
         assertThat(productService.listStocks())
